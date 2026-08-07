@@ -1,0 +1,17 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+# Allow script/Deploy.s.sol to write its deploy.{BOT_NETWORK}.json record
+# into the contracts project root (vm.writeJson).
+fs_permissions = [{ access = "read-write", path = "." }]
+
+[rpc_endpoints]
+bohr = "https://rpc.bohr.life" # BOT Chain testnet (chain 968)
+botchain = "https://rpc.botchain.ai" # BOT Chain mainnet (chain 677)
+
+# Deploy: forge script script/Deploy.s.sol --rpc-url bohr --broadcast  # testnet (BOT_NETWORK=testnet)
+#         forge script script/Deploy.s.sol --rpc-url botchain --broadcast  # mainnet (BOT_NETWORK=mainnet)

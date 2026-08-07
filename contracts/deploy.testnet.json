@@ -1,0 +1,13 @@
+{
+  "agentRegistry": "0x0cA3F183374f75e5a2d81C29A37B00Aab075be87",
+  "agentRegistryEnv": "AGENT_REGISTRY_ADDRESS_TESTNET",
+  "chainId": 968,
+  "consentGateway": "0xAc1813a52D1d3b6fFf0080feD17362C8aD86F372",
+  "consentGatewayEnv": "CONSENT_GATEWAY_ADDRESS_TESTNET",
+  "deployedAtBlock": 19058783,
+  "deployedAtTimestamp": 1786129335,
+  "deployer": "0x68074A08A725fedebc0295cf72f22390FED9283B",
+  "explorerUrl": "https://scan.bohr.life",
+  "network": "testnet",
+  "rpcUrl": "https://rpc.bohr.life"
+}

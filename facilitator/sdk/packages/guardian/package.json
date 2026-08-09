@@ -1,0 +1,35 @@
+{
+  "name": "@xbot02/guardian",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "xBOT02 guardian - approve/reject/expire consent requests and watch the consent gateway",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@xbot02/core": "^1.0.0",
+    "viem": "^2.55.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.10",
+    "typescript": "^5.9.0"
+  }
+}

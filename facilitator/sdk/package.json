@@ -1,0 +1,19 @@
+{
+  "name": "xBOT02",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "xBOT02 - the x402 SDK family for BOT Chain: core, fetch, guardian",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "publish:all": "npm run build && npm publish --workspace @xbot02/core && npm publish --workspace @xbot02/fetch && npm publish --workspace @xbot02/guardian && npm publish --workspace @xbot02/mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  }
+}

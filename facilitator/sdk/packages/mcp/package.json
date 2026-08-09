@@ -1,0 +1,43 @@
+{
+  "name": "@xbot02/mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "xBOT02 MCP - expose the consent layer, policy, and x402 payments as Model Context Protocol tools for any agent client (Claude, opencode, ChatGPT)",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "xbot02-agent": "./dist/cli/agent.js",
+    "xbot02-guardian": "./dist/cli/guardian.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@xbot02/core": "^1.0.0",
+    "@xbot02/fetch": "^1.0.0",
+    "@xbot02/guardian": "^1.0.0",
+    "viem": "^2.55.11",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.10",
+    "typescript": "^5.9.0"
+  }
+}

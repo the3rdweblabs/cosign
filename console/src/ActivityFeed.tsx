@@ -118,7 +118,7 @@ function FeedRow({ request, now }: { request: ConsentRequestRecord; now: number 
       </td>
       <td className="px-4 py-3 font-mono text-slate-400">{shortAddress(request.target)}</td>
       <td className="px-4 py-3 text-slate-300">{actionTypeLabel(request.actionType)}</td>
-      <td className="px-4 py-3 font-mono text-slate-300">{formatAmount(request.amount)}</td>
+      <td className="px-4 py-3 font-mono text-slate-300">{formatAmount(request.amount, chainConfig.network === "mainnet" ? "BOT" : "tBOT")}</td>
       <td className="px-4 py-3">
         <StatusBadge status={request.status} />
       </td>

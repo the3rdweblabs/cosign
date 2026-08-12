@@ -84,7 +84,7 @@ export function RegisterAgent({ connectedAddress, walletClient, connectWallet, e
     try {
       await ensureChain();
       const hash = await registerAgent(
-        { wallet: walletClient, gatewayAddress, registryAddress },
+        { wallet: walletClient, gatewayAddress, registryAddress, account: connectedAddress },
         agent as Address,
         capWei,
         periodSeconds,
@@ -202,10 +202,10 @@ export function RegisterAgent({ connectedAddress, walletClient, connectWallet, e
               </dd>
               <dt className="text-slate-500">Spend cap</dt>
               <dd className="font-mono text-slate-300">
-                {formatAmount(policy.spendCap)} per {policy.periodSeconds.toString()}s
+                {formatAmount(policy.spendCap, chainConfig.network === "mainnet" ? "BOT" : "tBOT")} per {policy.periodSeconds.toString()}s
               </dd>
               <dt className="text-slate-500">Spent this period</dt>
-              <dd className="font-mono text-slate-300">{formatAmount(policy.spentInPeriod)}</dd>
+              <dd className="font-mono text-slate-300">{formatAmount(policy.spentInPeriod, chainConfig.network === "mainnet" ? "BOT" : "tBOT")}</dd>
               <dt className="text-slate-500">Active</dt>
               <dd className="font-mono text-slate-300">{policy.active ? "yes" : "no"}</dd>
             </dl>

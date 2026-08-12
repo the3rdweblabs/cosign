@@ -107,7 +107,7 @@ function RequestRow({
           <dt className="text-slate-500">To</dt>
           <dd className="font-mono text-slate-300">{shortAddress(request.target)}</dd>
           <dt className="text-slate-500">Amount</dt>
-          <dd className="font-mono text-slate-300">{formatAmount(request.amount)}</dd>
+          <dd className="font-mono text-slate-300">{formatAmount(request.amount, chainConfig.network === "mainnet" ? "BOT" : "tBOT")}</dd>
           <dt className="text-slate-500">Guardian</dt>
           <dd className="font-mono text-slate-300">
             {request.guardian ? shortAddress(request.guardian) : <span className="text-slate-500">unknown (registry unset?)</span>}

@@ -77,8 +77,8 @@ export function useWallet(): UseWalletReturn {
       return;
     }
     try {
-      await ensureChain();
       const [account] = await walletClient.requestAddresses();
+      await ensureChain();
       setAddress(account ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

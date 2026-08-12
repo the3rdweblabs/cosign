@@ -30,6 +30,7 @@ export interface GuardianWallet {
 export interface GuardianOptions {
   wallet: GuardianWallet;
   gatewayAddress: Address;
+  account?: unknown;
 }
 
 const GATEWAY_EVENTS = ["ActionRequested", "ActionAutoApproved", "ActionApproved", "ActionRejected", "ActionExpired"] as const;
@@ -61,14 +62,18 @@ export async function registerAgent(
   spendCap: bigint,
   periodSeconds: bigint,
 ): Promise<Hex> {
-  return options.wallet.writeContract({
+  const params: Record<string, unknown> = {
     chain: options.wallet.chain,
-    account: options.wallet.account ?? null,
     address: options.registryAddress,
     abi: agentRegistryAbi,
     functionName: "registerAgent",
     args: [agent, spendCap, periodSeconds],
-  });
+  };
+  const account = options.account ?? options.wallet.account;
+  if (account) {
+    params.account = account;
+  }
+  return options.wallet.writeContract(params);
 }
 
 export interface AgentPolicy {
@@ -99,14 +104,18 @@ export async function getAgentPolicy(client: PublicClient, registryAddress: Addr
 }
 
 async function write(options: GuardianOptions, functionName: "approve" | "reject" | "expire", requestId: bigint): Promise<Hex> {
-  return options.wallet.writeContract({
+  const params: Record<string, unknown> = {
     chain: options.wallet.chain,
-    account: options.wallet.account ?? null,
     address: options.gatewayAddress,
     abi: consentGatewayAbi,
     functionName,
     args: [requestId],
-  });
+  };
+  const account = options.account ?? options.wallet.account;
+  if (account) {
+    params.account = account;
+  }
+  return options.wallet.writeContract(params);
 }
 
 /** Reads a request's current on-chain status label. */

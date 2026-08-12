@@ -16,10 +16,10 @@ export function actionTypeLabel(actionType: Hex): string {
   return `${actionType.slice(0, 10)}…`;
 }
 
-export function formatAmount(wei: bigint): string {
+export function formatAmount(wei: bigint, symbol = "tBOT"): string {
   const eth = Number(wei) / 1e18;
-  if (eth >= 1) return `${eth.toLocaleString(undefined, { maximumFractionDigits: 4 })} tBOT`;
-  return `${eth.toLocaleString(undefined, { maximumFractionDigits: 6 })} tBOT`;
+  if (eth >= 1) return `${eth.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbol}`;
+  return `${eth.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${symbol}`;
 }
 
 export function shortAddress(address: Address): string {

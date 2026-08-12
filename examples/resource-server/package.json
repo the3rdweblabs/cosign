@@ -1,0 +1,23 @@
+{
+  "name": "cosign-resource-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cosign x xBOT02 example paidAPI for BOT Chain (chain 968): returns HTTP 402, serves after facilitator confirms settlement",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@xbot02/core": "file:../../facilitator/sdk/packages/core",
+    "viem": "^2.55.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.10",
+    "typescript": "^5.9.0"
+  }
+}

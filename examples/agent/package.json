@@ -1,0 +1,23 @@
+{
+  "name": "cosign-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cosign (xBOT02) autonomous agent for BOT Chain (chain 968): reasons, requests consent on-chain, pays via x402",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/agent.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/agent.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@xbot02/core": "file:../../facilitator/sdk/packages/core",
+    "viem": "^2.55.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.10",
+    "typescript": "^5.9.0"
+  }
+}

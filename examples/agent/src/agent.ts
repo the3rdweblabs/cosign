@@ -135,6 +135,22 @@ export async function runAgent(options: AgentOptions): Promise<AgentRunResult> {
   }
   console.log(`[agent] resource asks: ${payment.amount} wei tBOT -> ${payment.payTo} on ${payment.network}`);
 
+  // 1.5. Balance check: can the agent cover the payment + gas?
+  const balanceOk = await checkBalance(wallet, payment);
+  if (!balanceOk.ok) {
+    console.log(`[agent] balance check failed: ${balanceOk.reason}`);
+    const message = await reasonAboutFailure({ task: options.task, diagnosis: balanceOk.reason });
+    console.log(`[agent] ${message}`);
+    return {
+      status: "failed",
+      requestId: 0n,
+      autoApproved: false,
+      served: false,
+      justification: message,
+      failure: { kind: "balance", service: "agent", detail: balanceOk.reason },
+    };
+  }
+
   // 2. If the endpoint requires on-chain consent (its payment requirement says
   //    so), decide the action + justification (Claude), then request consent
   //    through the ConsentGateway. Pure x402 endpoints skip this entirely -
@@ -427,6 +443,41 @@ async function fetchFeeSchedule(facilitatorUrl: string): Promise<FeeSchedule | u
     };
   } catch {
     return undefined;
+  }
+}
+
+interface BalanceCheckOk {
+  ok: true;
+}
+interface BalanceCheckFail {
+  ok: false;
+  reason: string;
+}
+type BalanceCheckResult = BalanceCheckOk | BalanceCheckFail;
+
+/**
+ * Checks whether the agent's wallet balance can cover the payment amount
+ * plus estimated gas. Returns early with a clear diagnosis if not.
+ */
+async function checkBalance(wallet: AgentWallet, payment: PaymentOption): Promise<BalanceCheckResult> {
+  try {
+    const balance = await wallet.publicClient.getBalance({ address: wallet.address });
+    const gasPrice = await wallet.publicClient.getGasPrice();
+    const gasLimit = 21000n;
+    const totalNeeded = BigInt(payment.amount) + gasLimit * gasPrice;
+
+    if (balance < totalNeeded) {
+      return {
+        ok: false,
+        reason: `insufficient balance: have ${balance.toString()} wei, need ${totalNeeded.toString()} wei (${payment.amount} payment + ~${(gasLimit * gasPrice).toString()} gas)`,
+      };
+    }
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `balance check failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 

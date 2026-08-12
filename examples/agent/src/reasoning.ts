@@ -92,7 +92,7 @@ const PROVIDER_DEFAULTS: Record<Provider, ProviderDefaults> = {
   groq: {
     baseUrl: "https://api.groq.com/openai/v1",
     modelEnv: "GROQ_MODEL",
-    defaultModel: "openai/gpt-oss-20b",
+    defaultModel: "llama-3.3-70b-versatile",
   },
 };
 

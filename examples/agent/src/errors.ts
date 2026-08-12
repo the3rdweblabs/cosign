@@ -3,10 +3,10 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 /** Why an agent step failed. `unreachable` = the service is down. */
-export type FailureKind = "unreachable" | "http" | "malformed" | "unexpected";
+export type FailureKind = "unreachable" | "http" | "malformed" | "unexpected" | "balance";
 
 /** The external service that is (or may be) at fault. */
-export type ServiceKind = "resource" | "facilitator";
+export type ServiceKind = "resource" | "facilitator" | "agent";
 
 export interface Diagnosis {
   service: ServiceKind;

@@ -18,12 +18,12 @@ npm i @xbot02/core
 | --- | --- |
 | `botChainTestnet`, `botChainMainnet` | viem `Chain` configs (chain 968 / 677) |
 | `botNetworkConfig`, `botNetworkFromEnv`, `envFor`, `botChainFromEnv` | `BOT_NETWORK`-driven chain selection with `NAME_<NETWORK>` env convention |
-| `CONSENT_GATEWAY_ABI`, `AGENT_REGISTRY_ABI`, `ACTION_REQUESTED_EVENT`, `actionTypeHash` | Contract bindings |
-| `REQUEST_STATUS`, `STATUS`, `STATUS_NUM`, `STATUS_ORDER` | `ConsentGateway.Status` enum ↔ labels |
+| `consentGatewayAbi`, `agentRegistryAbi`, `actionRequestedEvent`, `actionTypeHash` | Contract bindings |
+| `requestStatus`, `statusNum`, `statusOrder` | `ConsentGateway.Status` enum ↔ labels |
 | `ConsentClient` | Agent calls `requestAction()`, polls for guardian decisions |
 | `createWalletSource` | Private-key / mnemonic / remote json-rpc signer |
 | `paymentMiddleware`, `buildPaymentRequirements`, `encodePaymentRequirements` | Turn any route into a paid x402 route |
-| `PaymentDetails`, `VerifyRequest`, `VerificationResult`, `SettlementResult`, `X402_SCHEME`, `NATIVE_ASSET`, CAIP-2 ids | x402 types |
+| `PaymentDetails`, `VerifyRequest`, `VerificationResult`, `SettlementResult`, `x402Scheme`, `nativeAsset`, CAIP-2 ids | x402 types |
 | `FeeSchedule`, `computeFeeAmount` | Facilitator surcharge math |
 | `formatAmount`, `shortAddress`, `timeAgo`, `actionTypeLabel` | Display helpers |
 

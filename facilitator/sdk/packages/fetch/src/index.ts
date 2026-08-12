@@ -4,12 +4,14 @@
 
 import { parseTransaction, type Address, type Chain, type Hex, type LocalAccount } from "viem";
 import {
-  NATIVE_ASSET,
-  X402_SCHEME,
+  nativeAsset,
+  x402Scheme,
+  x402Version,
   botNetworkConfig,
   computeFeeAmount,
   type FeeSchedule,
   type PaymentDetails,
+  type PaymentRequirements,
 } from "@xbot02/core";
 
 export interface WithBOT02Options {
@@ -73,7 +75,7 @@ export function withBOT02(options: WithBOT02Options): typeof fetch {
     const accepted = parsePaymentRequirements(requirementHeader);
     const option = pickAccepted(accepted, network);
     if (!option) {
-      throw new Error(`xBOT02: no acceptable payment option for network ${network} (scheme ${X402_SCHEME}, native asset)`);
+      throw new Error(`xBOT02: no acceptable payment option for network ${network} (scheme ${x402Scheme}, native asset)`);
     }
 
     const fee = await getFee();
@@ -82,9 +84,9 @@ export function withBOT02(options: WithBOT02Options): typeof fetch {
     let signed = await signPayment(options, option, 0n, feeActive ? fee : undefined);
     let verify = await callFacilitator(facilitator, "/verify", option, signed);
 
-    if (verify?.verified === true) {
+    if (verify?.isValid === true) {
       const settle = await callFacilitator(facilitator, "/settle", option, signed);
-      if (settle?.settled !== true) {
+      if (settle?.success !== true) {
         signed = await signPayment(options, option, await gasPrice(options), feeActive ? fee : undefined);
         await settleBoth(facilitator, option, signed);
       }
@@ -104,14 +106,25 @@ interface SignedPayment {
   feeRawTx?: Hex;
 }
 
+/** x402 v2 facilitator response shapes (see x402-specification-v2.md §5.3/§5.4). */
+interface FacilitatorResponse {
+  isValid?: boolean;
+  invalidReason?: string;
+  payer?: string;
+  success?: boolean;
+  errorReason?: string;
+  transaction?: string;
+  network?: string;
+}
+
 async function settleBoth(facilitatorUrl: string, option: PaymentDetails, signed: SignedPayment): Promise<void> {
   const verify = await callFacilitator(facilitatorUrl, "/verify", option, signed);
-  if (verify?.verified !== true) {
-    throw new Error(`xBOT02: payment not verified by facilitator: ${verify?.message ?? "unknown reason"}`);
+  if (verify?.isValid !== true) {
+    throw new Error(`xBOT02: payment not verified by facilitator: ${verify?.invalidReason ?? "unknown reason"}`);
   }
   const settle = await callFacilitator(facilitatorUrl, "/settle", option, signed);
-  if (settle?.settled !== true) {
-    throw new Error(`xBOT02: payment not settled by facilitator: ${settle?.message ?? "unknown reason"}`);
+  if (settle?.success !== true) {
+    throw new Error(`xBOT02: payment not settled by facilitator: ${settle?.errorReason ?? "unknown reason"}`);
   }
 }
 
@@ -148,37 +161,43 @@ async function signPayment(
   return { rawTx, feeRawTx };
 }
 
-async function callFacilitator(facilitatorUrl: string,
+async function callFacilitator(
+  facilitatorUrl: string,
   path: string,
-  paymentDetails: PaymentDetails,
+  paymentDetails: PaymentRequirements,
   signed: SignedPayment,
-): Promise<{ verified?: boolean; settled?: boolean; message?: string; txHash?: string } | undefined> {
+): Promise<FacilitatorResponse | undefined> {
   const res = await fetch(`${facilitatorUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      paymentDetails,
-      paymentPayload: signed.feeRawTx ? { rawTx: signed.rawTx, feeRawTx: signed.feeRawTx } : { rawTx: signed.rawTx },
+      x402Version: x402Version,
+      paymentRequirements: paymentDetails,
+      paymentPayload: {
+        x402Version: x402Version,
+        accepted: paymentDetails,
+        payload: signed.feeRawTx ? { rawTx: signed.rawTx, feeRawTx: signed.feeRawTx } : { rawTx: signed.rawTx },
+      },
     }),
   });
-  const json = (await res.json()) as { result?: { verified?: boolean; settled?: boolean; message?: string; txHash?: string } };
-  return json.result;
+  if (!res.ok) return undefined;
+  return (await res.json()) as FacilitatorResponse;
 }
 
 async function fetchFeeSchedule(facilitatorUrl: string, baseFetch: typeof fetch): Promise<FeeSchedule> {
   try {
     const res = await baseFetch(`${facilitatorUrl}/v1/fee`);
-    if (!res.ok) return { bps: 0, receiver: null, network: "", asset: NATIVE_ASSET };
+    if (!res.ok) return { bps: 0, receiver: null, network: "", asset: nativeAsset };
     const json = (await res.json()) as { result?: FeeSchedule } | FeeSchedule;
     const schedule: FeeSchedule = "result" in json && json.result ? json.result : (json as FeeSchedule);
     return {
       bps: Number(schedule.bps ?? 0),
       receiver: schedule.receiver ?? null,
       network: schedule.network ?? "",
-      asset: schedule.asset ?? NATIVE_ASSET,
+      asset: schedule.asset ?? nativeAsset,
     };
   } catch {
-    return { bps: 0, receiver: null, network: "", asset: NATIVE_ASSET };
+    return { bps: 0, receiver: null, network: "", asset: nativeAsset };
   }
 }
 
@@ -194,8 +213,9 @@ function parseTransactionNonce(rawTx: Hex): number {
 
 function parsePaymentRequirements(header: string): PaymentDetails[] {
   try {
-    const parsed = JSON.parse(decodeBase64(header)) as { accepted?: unknown };
-    return Array.isArray(parsed.accepted) ? (parsed.accepted as PaymentDetails[]) : [];
+    const parsed = JSON.parse(decodeBase64(header)) as { accepts?: unknown; accepted?: unknown };
+    const list = Array.isArray(parsed.accepts) ? parsed.accepts : parsed.accepted;
+    return Array.isArray(list) ? (list as PaymentDetails[]) : [];
   } catch {
     return [];
   }
@@ -204,9 +224,9 @@ function parsePaymentRequirements(header: string): PaymentDetails[] {
 function pickAccepted(accepted: PaymentDetails[], network: string): PaymentDetails | undefined {
   return accepted.find(
     (a) =>
-      a.scheme === X402_SCHEME &&
+      a.scheme === x402Scheme &&
       a.network.toLowerCase() === network.toLowerCase() &&
-      a.asset.toLowerCase() === NATIVE_ASSET,
+      a.asset.toLowerCase() === nativeAsset,
   );
 }
 

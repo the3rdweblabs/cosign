@@ -38,11 +38,16 @@ function details(amount = "1000"): SelfpayPaymentDetails {
     amount,
     asset: "0x0000000000000000000000000000000000000000",
     payTo: PAYTO,
+    maxTimeoutSeconds: 120,
   };
 }
 
 function req(rawTx: Hex, overrides: Partial<SelfpayPaymentDetails> = {}): VerifyRequest {
-  return { paymentDetails: { ...details(), ...overrides }, paymentPayload: { rawTx } };
+  const requirements = { ...details(), ...overrides };
+  return {
+    paymentRequirements: requirements,
+    paymentPayload: { x402Version: 2, accepted: requirements, payload: { rawTx } },
+  };
 }
 
 test("verify: accepts a correctly signed native transfer", async () => {

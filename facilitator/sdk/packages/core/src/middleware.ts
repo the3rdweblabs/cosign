@@ -3,8 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { parseUnits, type Address } from "viem";
-import { BOT_TESTNET_CAIP2, NATIVE_ASSET, X402_SCHEME, type PaymentDetails } from "./x402.js";
-
+import { botTestnetCaip2, nativeAsset, x402Scheme, x402Version, type PaymentRequired, type PaymentRequirements, type ResourceInfo } from "./x402.js";
 export interface PaymentMiddlewareOptions {
   /** Where the xBOT02 facilitator lives, "". */
   facilitatorUrl: string;
@@ -16,34 +15,46 @@ export interface PaymentMiddlewareOptions {
   network?: string;
   asset?: Address;
   maxTimeoutSeconds?: number;
+  /** Optional ResourceInfo overrides (serviceName, description, mimeType, ...). */
+  resource?: Partial<Omit<ResourceInfo, "url">>;
+  /** Extra keys merged into the advertised payment option, e.g. `{ requireConsent: true }`. */
+  extra?: Record<string, unknown>;
 }
 
-export interface PaymentRequirements {
-  x402Version: number;
-  resource: string;
-  accepted: PaymentDetails[];
-}
-
-/** Builds the x402 requirements object a 402 response must carry. */
-export function buildPaymentRequirements(opts: PaymentMiddlewareOptions, resource: string): PaymentRequirements {
+/**
+ * Builds the v2 `PaymentRequired` object a 402 response must carry.
+ * BOT Chain `exact` mechanism: native value transfer via the EOA paymaster /
+ * self-pay, default `authorization` payment flow (verify -> resource ->
+ * settle -> respond), advertised through the reserved `extra` keys.
+ */
+export function buildPaymentRequirements(opts: PaymentMiddlewareOptions, resourceUrl: string): PaymentRequired {
   return {
-    x402Version: 2,
-    resource,
-    accepted: [
+    x402Version: x402Version,
+    error: "PAYMENT-SIGNATURE header is required",
+    resource: {
+      url: resourceUrl,
+      ...opts.resource,
+    },
+    accepts: [
       {
-        scheme: X402_SCHEME,
-        network: opts.network ?? BOT_TESTNET_CAIP2,
+        scheme: x402Scheme,
+        network: opts.network ?? botTestnetCaip2,
         amount: parseUnits(opts.price, 18).toString(),
-        asset: opts.asset ?? NATIVE_ASSET,
+        asset: opts.asset ?? nativeAsset,
         payTo: opts.payTo,
         maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 600,
-      },
+        extra: {
+          assetTransferMethod: "native",
+          paymentFlow: "authorization",
+          ...opts.extra,
+        },
+      } satisfies PaymentRequirements,
     ],
   };
 }
 
-/** Encodes requirements into the base64 format x402 clients expect in the `payment-required` header. */
-export function encodePaymentRequirements(requirements: PaymentRequirements): string {
+/** Encodes the v2 PaymentRequired object into the base64 `payment-required` header format. */
+export function encodePaymentRequirements(requirements: PaymentRequired): string {
   const json = JSON.stringify(requirements);
   const buffer = (globalThis as Record<string, unknown>)["Buffer"] as
     | { from(data: string, encoding: string): { toString(encoding: string): string } }

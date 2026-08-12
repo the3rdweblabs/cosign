@@ -5,7 +5,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { AGENT_REGISTRY_ABI, ConsentClient, type WalletSource } from "@xbot02/core";
+import { agentRegistryAbi, ConsentClient, type WalletSource } from "@xbot02/core";
 import { withBOT02 } from "@xbot02/fetch";
 import { expireRequest } from "@xbot02/guardian";
 import type { Address, LocalAccount } from "viem";
@@ -138,7 +138,7 @@ export function createAgentServer(deps: AgentServerDeps): McpServer {
         const agent = (typeof a.agent === "string" ? a.agent : source.account.address) as Address;
         const policy = await source.publicClient.readContract({
           address: deps.registryAddress,
-          abi: AGENT_REGISTRY_ABI,
+          abi: agentRegistryAbi,
           functionName: "getPolicy",
           args: [agent],
         });

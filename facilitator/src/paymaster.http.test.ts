@@ -70,6 +70,40 @@ test("HTTP: GET rejected as invalid request", async () => {
   }
 });
 
+test("HTTP: GET /supported advertises chain id, payment flow, and signers", async () => {
+  const server = createPaymasterServer({
+    policy,
+    sponsorPrivateKey: SPONSOR,
+    network: "eip155:968",
+    signers: ["0x0000000000000000000000000000000000000001"],
+  });
+  server.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const { port } = address;
+
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/supported`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      result: {
+        kinds: { x402Version: number; scheme: string; network: string; extra: { paymentFlow: string } }[];
+        extensions: string[];
+        signers: Record<string, string[]>;
+      };
+    };
+    assert.equal(body.result.kinds[0].x402Version, 2);
+    assert.equal(body.result.kinds[0].scheme, "exact");
+    assert.equal(body.result.kinds[0].network, "eip155:968");
+    assert.equal(body.result.kinds[0].extra.paymentFlow, "authorization");
+    assert.deepEqual(body.result.signers, { "eip155:968": ["0x0000000000000000000000000000000000000001"] });
+    assert.deepEqual(body.result.extensions, []);
+  } finally {
+    server.close();
+  }
+});
+
 test("HTTP: eth_sendRawTransaction errors clearly when no sponsor key is configured", async () => {
   const server = createPaymasterServer({ policy });
   server.listen(0);
@@ -129,31 +163,177 @@ test("HTTP: x402 /verify and /settle route to the self-pay adapter", async () =>
   assert.ok(address && typeof address === "object");
   const { port } = address;
 
-  const paymentDetails = {
+  const paymentRequirements = {
     scheme: "exact",
     network: "eip155:968",
     amount: "1000",
     asset: "0x0000000000000000000000000000000000000000",
     payTo,
+    maxTimeoutSeconds: 120,
+  };
+  const paymentPayload = {
+    x402Version: 2,
+    accepted: paymentRequirements,
+    payload: { rawTx },
   };
 
   try {
     const verifyRes = await fetch(`http://127.0.0.1:${port}/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ paymentDetails, paymentPayload: { rawTx } }),
+      body: JSON.stringify({ x402Version: 2, paymentRequirements, paymentPayload }),
     });
-    const verifyBody = (await verifyRes.json()) as { result: { verified: boolean } };
-    assert.equal(verifyBody.result.verified, true);
+    const verifyBody = (await verifyRes.json()) as { isValid: boolean; payer?: string; extra?: { paymentTxHash?: string } };
+    assert.equal(verifyRes.status, 200);
+    assert.equal(verifyBody.isValid, true);
+    assert.equal(verifyBody.payer, agent.address);
+    assert.match(verifyBody.extra?.paymentTxHash ?? "", /^0x[0-9a-f]{64}$/);
 
     const settleRes = await fetch(`http://127.0.0.1:${port}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ paymentDetails, paymentPayload: { rawTx } }),
+      body: JSON.stringify({ x402Version: 2, paymentRequirements, paymentPayload }),
     });
-    const settleBody = (await settleRes.json()) as { result: { settled: boolean; txHash?: string } };
-    assert.equal(settleBody.result.settled, true);
-    assert.equal(settleBody.result.txHash, "0xaa00000000000000000000000000000000000000000000000000000000000000");
+    const settleBody = (await settleRes.json()) as {
+      success: boolean;
+      payer?: string;
+      transaction?: string;
+      network?: string;
+      amount?: string;
+      extensions?: { blockNumber?: string };
+    };
+    assert.equal(settleRes.status, 200);
+    assert.equal(settleBody.success, true);
+    assert.equal(settleBody.payer, agent.address);
+    assert.equal(settleBody.transaction, "0xaa00000000000000000000000000000000000000000000000000000000000000");
+    assert.equal(settleBody.network, "eip155:968");
+    assert.equal(settleBody.amount, "1000");
+    assert.equal(settleBody.extensions?.blockNumber, "77");
+  } finally {
+    server.close();
+  }
+});
+
+test("HTTP: x402 /verify rejects an invalid payment with HTTP 402 and invalidReason", async () => {
+  const PK = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as Hex;
+  const agent = privateKeyToAccount(PK);
+  const payTo = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Address;
+
+  const rawTx = await agent.signTransaction({
+    to: payTo,
+    value: 1000n,
+    gas: 21000n,
+    gasPrice: 1_000_000_000n,
+    nonce: 0,
+    chainId: 968,
+  });
+
+  const selfpayClient = {
+    call: async () => {},
+    sendRawTransaction: async () => "0xaa00000000000000000000000000000000000000000000000000000000000000" as Hex,
+    waitForTransactionReceipt: async () => ({ status: "success", blockNumber: 77n }),
+  } as unknown as PublicClient;
+
+  const server = createPaymasterServer({
+    policy,
+    sponsorPrivateKey: SPONSOR,
+    x402: new X402Adapter({ selfpay: new SelfpayFallback(selfpayClient, 968) }),
+  });
+  server.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const { port } = address;
+
+  // Payload signed to `payTo`, but requirements demand a different recipient:
+  // verification must fail with HTTP 402 and a machine-readable reason.
+  const paymentRequirements = {
+    scheme: "exact",
+    network: "eip155:968",
+    amount: "1000",
+    asset: "0x0000000000000000000000000000000000000000",
+    payTo: "0xcccccccccccccccccccccccccccccccccccccccc",
+    maxTimeoutSeconds: 120,
+  };
+  const paymentPayload = {
+    x402Version: 2,
+    accepted: paymentRequirements,
+    payload: { rawTx },
+  };
+
+  try {
+    const verifyRes = await fetch(`http://127.0.0.1:${port}/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ x402Version: 2, paymentRequirements, paymentPayload }),
+    });
+    const verifyBody = (await verifyRes.json()) as { isValid: boolean; invalidReason?: string };
+    assert.equal(verifyRes.status, 402);
+    assert.equal(verifyBody.isValid, false);
+    assert.match(verifyBody.invalidReason ?? "", /invalid_payload|payTo/);
+  } finally {
+    server.close();
+  }
+});
+
+test("HTTP: x402 /settle returns HTTP 402 with success=false when the broadcast fails", async () => {
+  const PK = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as Hex;
+  const agent = privateKeyToAccount(PK);
+  const payTo = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Address;
+
+  const rawTx = await agent.signTransaction({
+    to: payTo,
+    value: 1000n,
+    gas: 21000n,
+    gasPrice: 1_000_000_000n,
+    nonce: 0,
+    chainId: 968,
+  });
+
+  const selfpayClient = {
+    call: async () => {},
+    sendRawTransaction: async () => {
+      throw new Error("insufficient funds for gas");
+    },
+    waitForTransactionReceipt: async () => ({ status: "success", blockNumber: 77n }),
+  } as unknown as PublicClient;
+
+  const server = createPaymasterServer({
+    policy,
+    sponsorPrivateKey: SPONSOR,
+    x402: new X402Adapter({ selfpay: new SelfpayFallback(selfpayClient, 968) }),
+  });
+  server.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const { port } = address;
+
+  const paymentRequirements = {
+    scheme: "exact",
+    network: "eip155:968",
+    amount: "1000",
+    asset: "0x0000000000000000000000000000000000000000",
+    payTo,
+    maxTimeoutSeconds: 120,
+  };
+  const paymentPayload = {
+    x402Version: 2,
+    accepted: paymentRequirements,
+    payload: { rawTx },
+  };
+
+  try {
+    const settleRes = await fetch(`http://127.0.0.1:${port}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ x402Version: 2, paymentRequirements, paymentPayload }),
+    });
+    const settleBody = (await settleRes.json()) as { success: boolean; errorReason?: string; transaction?: string };
+    assert.equal(settleRes.status, 402);
+    assert.equal(settleBody.success, false);
+    assert.equal(settleBody.errorReason, "invalid_transaction_state");
+    assert.equal(settleBody.transaction, "");
   } finally {
     server.close();
   }

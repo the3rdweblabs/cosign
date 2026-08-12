@@ -3,12 +3,15 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { keccak256, parseTransaction, recoverTransactionAddress, type Hex } from "viem";
-import { SelfpayFallback, type SelfpayPaymentDetails, type SettlementResult, type VerificationResult, type VerifyRequest } from "./selfpay-fallback.js";
+import { x402Error, botNetworkConfig, type PaymentRequirements, type SettlementResult, type VerificationResult, type VerifyRequest, type X402ErrorCode } from "@xbot02/core";
+import { SelfpayFallback, payloadFeeRawTx, payloadRawTx } from "./selfpay-fallback.js";
 import { BundlerNotReadyError, submitBundle, type BundleSubmission } from "./bundler.js";
 import type { SponsorPolicy } from "./policy.js";
-import { botNetworkConfig } from "@xbot02/core";
 
 export const SUPPORTED_SCHEME = "exact";
+
+/** Payment flows this facilitator implements (see vendored spec section 6.1). */
+export const SUPPORTED_PAYMENT_FLOWS = new Set(["authorization"]);
 
 export interface PaymasterBackend {
   enabled: boolean;
@@ -47,7 +50,8 @@ export interface X402AdapterOptions {
 export class X402Adapter {
   private readonly selfpay: SelfpayFallback;
   private readonly paymaster?: PaymasterBackend;
-  private readonly network: string;
+  /** CAIP-2 network this facilitator settles on (e.g. "eip155:968"). */
+  readonly network: string;
 
   constructor(options: X402AdapterOptions) {
     this.selfpay = options.selfpay;
@@ -56,13 +60,16 @@ export class X402Adapter {
   }
 
   async verify(req: VerifyRequest): Promise<VerificationResult> {
-    const unsupported = this.checkSchemeNetwork(req.paymentDetails);
-    if (unsupported) return { verified: false, message: unsupported };
+    const requirements = req.paymentRequirements ?? req.paymentDetails;
+    const unsupported = this.checkRequirements(requirements);
+    if (unsupported) return { verified: false, code: unsupported.code, message: unsupported.message };
 
-    if (this.paymaster?.enabled && isZeroGasPriceTx(req.paymentPayload.rawTx)) {
-      if (req.paymentPayload.feeRawTx) {
+    const rawTx = payloadRawTx(req.paymentPayload);
+    if (this.paymaster?.enabled && rawTx && isZeroGasPriceTx(rawTx)) {
+      if (payloadFeeRawTx(req.paymentPayload)) {
         return {
           verified: false,
+          code: x402Error.INVALID_PAYLOAD,
           message:
             "A fee cannot ride the zero-gas paymaster path; re-request payment and sign the fee with a normal gas price (self-pay).",
         };
@@ -73,13 +80,16 @@ export class X402Adapter {
   }
 
   async settle(req: VerifyRequest): Promise<SettlementResult> {
-    const unsupported = this.checkSchemeNetwork(req.paymentDetails);
-    if (unsupported) return { settled: false, message: unsupported };
+    const requirements = req.paymentRequirements ?? req.paymentDetails;
+    const unsupported = this.checkRequirements(requirements);
+    if (unsupported) return { settled: false, code: unsupported.code, message: unsupported.message };
 
-    if (this.paymaster?.enabled && isZeroGasPriceTx(req.paymentPayload.rawTx)) {
-      if (req.paymentPayload.feeRawTx) {
+    const rawTx = payloadRawTx(req.paymentPayload);
+    if (this.paymaster?.enabled && rawTx && isZeroGasPriceTx(rawTx)) {
+      if (payloadFeeRawTx(req.paymentPayload)) {
         return {
           settled: false,
+          code: x402Error.INVALID_PAYLOAD,
           message:
             "A fee cannot ride the zero-gas paymaster path; re-request payment and sign the fee with a normal gas price (self-pay).",
         };
@@ -87,7 +97,7 @@ export class X402Adapter {
       const bundler = this.paymaster.bundler ?? submitBundle;
       try {
         const { bundleHash } = await bundler({
-          userRawTx: req.paymentPayload.rawTx,
+          userRawTx: rawTx,
           sponsorPrivateKey: this.paymaster.sponsorPrivateKey,
         });
         return { settled: true, txHash: bundleHash };
@@ -95,24 +105,28 @@ export class X402Adapter {
         if (err instanceof BundlerNotReadyError) {
           return {
             settled: false,
+            code: x402Error.INVALID_TRANSACTION_STATE,
             message:
               "Native paymaster bundler is not ready; a zero-gas-price tx cannot be settled " +
               "through the public mempool. Re-request payment and sign with a normal gas price.",
           };
         }
-        return { settled: false, message: err instanceof Error ? err.message : String(err) };
+        return { settled: false, code: x402Error.UNEXPECTED_SETTLE_ERROR, message: err instanceof Error ? err.message : String(err) };
       }
     }
     return this.selfpay.settle(req);
   }
 
   private async verifyViaPaymaster(req: VerifyRequest): Promise<VerificationResult> {
-    const { rawTx } = req.paymentPayload;
+    const rawTx = payloadRawTx(req.paymentPayload);
+    if (!rawTx) {
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: "Payment payload is missing payload.rawTx" };
+    }
     let tx;
     try {
       tx = parseTransaction(rawTx);
     } catch (err) {
-      return { verified: false, message: `Could not parse rawTx: ${err instanceof Error ? err.message : String(err)}` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `Could not parse rawTx: ${err instanceof Error ? err.message : String(err)}` };
     }
     const verdict = await this.paymaster!.policy.checkSponsorable({
       to: tx.to ?? "0x",
@@ -120,7 +134,7 @@ export class X402Adapter {
       value: `0x${(tx.value ?? 0n).toString(16)}`,
     });
     if (!verdict.Sponsorable) {
-      return { verified: false, message: `Sponsor policy "${verdict.SponsorPolicy}" rejected this payment` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `Sponsor policy "${verdict.SponsorPolicy}" rejected this payment` };
     }
     return { verified: true, txHash: keccak256(rawTx) };
   }
@@ -133,12 +147,19 @@ export class X402Adapter {
     }
   }
 
-  private checkSchemeNetwork(details: SelfpayPaymentDetails): string | null {
+  private checkRequirements(details: PaymentRequirements | undefined): { code: X402ErrorCode; message: string } | null {
+    if (!details) {
+      return { code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: "Missing paymentRequirements (or legacy paymentDetails)" };
+    }
     if (details.scheme !== SUPPORTED_SCHEME) {
-      return `Unsupported payment scheme "${details.scheme}" (expected "${SUPPORTED_SCHEME}")`;
+      return { code: x402Error.INVALID_SCHEME, message: `Unsupported payment scheme "${details.scheme}" (expected "${SUPPORTED_SCHEME}")` };
     }
     if (details.network !== this.network) {
-      return `Unsupported payment network "${details.network}" (expected "${this.network}")`;
+      return { code: x402Error.INVALID_NETWORK, message: `Unsupported payment network "${details.network}" (expected "${this.network}")` };
+    }
+    const flow = (details.extra as { paymentFlow?: unknown } | undefined)?.paymentFlow;
+    if (flow !== undefined && !SUPPORTED_PAYMENT_FLOWS.has(String(flow))) {
+      return { code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: `Unsupported payment flow "${String(flow)}" (expected "${[...SUPPORTED_PAYMENT_FLOWS].join(", ")}")` };
     }
     return null;
   }

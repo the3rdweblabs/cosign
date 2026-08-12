@@ -3,7 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 /** Canonical Status enum -> label mapping, mirroring ConsentGateway.Status. */
-export const REQUEST_STATUS = {
+export const requestStatus = {
   0: "None",
   1: "AutoApproved",
   2: "Pending",
@@ -11,14 +11,11 @@ export const REQUEST_STATUS = {
   4: "Rejected",
   5: "Expired",
 } as const;
-export type RequestStatus = (typeof REQUEST_STATUS)[keyof typeof REQUEST_STATUS];
+export type RequestStatus = (typeof requestStatus)[keyof typeof requestStatus];
 
-/** Backwards-compatible alias. */
-export const STATUS = REQUEST_STATUS;
-
-export const STATUS_NUM = Object.fromEntries(
-  Object.entries(REQUEST_STATUS).map(([k, v]) => [v, Number(k)]),
+export const statusNum = Object.fromEntries(
+  Object.entries(requestStatus).map(([k, v]) => [v, Number(k)]),
 ) as Record<RequestStatus, number>;
 
 /** The Status enum order the contract stores. */
-export const STATUS_ORDER: RequestStatus[] = ["None", "AutoApproved", "Pending", "Approved", "Rejected", "Expired"];
+export const statusOrder: RequestStatus[] = ["None", "AutoApproved", "Pending", "Approved", "Rejected", "Expired"];

@@ -58,11 +58,20 @@ function details(amount = "1000"): SelfpayPaymentDetails {
     amount,
     asset: "0x0000000000000000000000000000000000000000",
     payTo: PAYTO,
+    maxTimeoutSeconds: 120,
   };
 }
 
 function req(rawTx: Hex, feeRawTx?: Hex): VerifyRequest {
-  return { paymentDetails: details(), paymentPayload: feeRawTx ? { rawTx, feeRawTx } : { rawTx } };
+  const requirements = details();
+  return {
+    paymentRequirements: requirements,
+    paymentPayload: {
+      x402Version: 2,
+      accepted: requirements,
+      payload: feeRawTx ? { rawTx, feeRawTx } : { rawTx },
+    },
+  };
 }
 
 test("computeFeeAmount rounds up (ceil) so the facilitator never under-collects", () => {

@@ -10,7 +10,7 @@ import { keccak256, stringToHex, type Hex } from "viem";
  * Includes the `expire()` path so an overdue pending request can be marked
  * Expired on-chain.
  */
-export const CONSENT_GATEWAY_ABI = [
+export const consentGatewayAbi = [
   {
     type: "function",
     name: "requestAction",
@@ -114,7 +114,7 @@ export const CONSENT_GATEWAY_ABI = [
 ] as const;
 
 /** AgentRegistry ABI - agent -> guardian mapping + rolling spend policy. */
-export const AGENT_REGISTRY_ABI = [
+export const agentRegistryAbi = [
   {
     type: "function",
     name: "getPolicy",
@@ -150,7 +150,7 @@ export const AGENT_REGISTRY_ABI = [
 ] as const;
 
 /** The ActionRequested event object, used for log backfill in watchers. */
-export const ACTION_REQUESTED_EVENT = CONSENT_GATEWAY_ABI.find(
+export const actionRequestedEvent = consentGatewayAbi.find(
   (item) => item.type === "event" && item.name === "ActionRequested",
 )!;
 

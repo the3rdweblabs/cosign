@@ -3,8 +3,8 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import type { Address, PublicClient } from "viem";
-import { ACTION_REQUESTED_EVENT } from "@xbot02/core";
-import { CONSENT_GATEWAY_ABI } from "./chain.js";
+import { actionRequestedEvent } from "@xbot02/core";
+import { consentGatewayAbi } from "./chain.js";
 
 export const SPONSOR_POLICY_NAME = "cosign-consent-gateway";
 
@@ -30,7 +30,9 @@ export interface RegisteredRequest {
 
 export interface SponsorPolicyOptions {
   client: PublicClient;
-  consentGatewayAddress: Address;
+  /** ConsentGateway address; undefined = consent layer not configured (see
+   *  ROADMAP.md decision). When undefined the isApproved gate always passes. */
+  consentGatewayAddress?: Address;
   policyName?: string;
   /** First block to scan for ActionRequested logs when resolving requests on-chain. */
   fromBlock?: bigint;
@@ -52,7 +54,7 @@ export interface SponsorPolicyOptions {
  */
 export class SponsorPolicy {
   private readonly client: PublicClient;
-  private readonly consentGatewayAddress: Address;
+  private readonly consentGatewayAddress?: Address;
   private readonly fromBlock: bigint;
   readonly policyName: string;
 
@@ -70,14 +72,21 @@ export class SponsorPolicy {
   }
 
   async checkSponsorable(params: SponsorableParams): Promise<SponsorVerdict> {
-    const request = this.latestMatchingRequest(params) ?? (await this.latestMatchingOnChainRequest(params));
+    // Consent layer not configured: plain x402 facilitator, gate always passes.
+    if (!this.consentGatewayAddress) {
+      return { Sponsorable: true, SponsorPolicy: this.policyName };
+    }
+
+    const request =
+      this.latestMatchingRequest(params) ??
+      (await this.latestMatchingOnChainRequest(this.consentGatewayAddress, params));
     if (!request) {
       return { Sponsorable: false, SponsorPolicy: this.policyName };
     }
 
     const approved = await this.client.readContract({
       address: this.consentGatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       functionName: "isApproved",
       args: [request.requestId],
     });
@@ -108,7 +117,10 @@ export class SponsorPolicy {
    * `ActionRequested` logs, so the paymaster works fully live (no in-memory
    * seeding needed): the agent's on-chain requestAction() is picked up as-is.
    */
-  private async latestMatchingOnChainRequest(params: SponsorableParams): Promise<RegisteredRequest | undefined> {
+  private async latestMatchingOnChainRequest(
+    gateway: Address,
+    params: SponsorableParams,
+  ): Promise<RegisteredRequest | undefined> {
     const from = params.from.toLowerCase();
     const to = params.to.toLowerCase();
     const value = hexToBigInt(params.value);
@@ -116,8 +128,8 @@ export class SponsorPolicy {
     let logs;
     try {
       logs = await this.client.getLogs({
-        address: this.consentGatewayAddress,
-        event: ACTION_REQUESTED_EVENT,
+        address: gateway,
+        event: actionRequestedEvent,
         fromBlock: this.fromBlock,
         toBlock: "latest",
       });

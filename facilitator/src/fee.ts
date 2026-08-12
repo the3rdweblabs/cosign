@@ -3,7 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { isAddress, parseTransaction, recoverTransactionAddress, type Address, type Hex, type PublicClient } from "viem";
-import { botNetworkConfig, computeFeeAmount, envFor, NATIVE_ASSET, type FeeSchedule } from "@xbot02/core";
+import { botNetworkConfig, computeFeeAmount, envFor, nativeAsset, type FeeSchedule } from "@xbot02/core";
 
 /**
  * Facilitator surcharge configuration (read once at startup).
@@ -55,7 +55,7 @@ export function feeSchedule(fee: FeeConfig | undefined, network: string): FeeSch
     bps: fee?.bps ?? 0,
     receiver: fee?.receiver ?? null,
     network,
-    asset: NATIVE_ASSET,
+    asset: nativeAsset,
   };
 }
 

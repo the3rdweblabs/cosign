@@ -21,7 +21,7 @@ function requirementsHeader(resource = "/paid-endpoint"): string {
   );
 }
 
-type FacilitatorBehavior = (rawTx: Hex, feeRawTx?: Hex) => { verified: boolean; settled: boolean };
+type FacilitatorBehavior = (rawTx: Hex, feeRawTx?: Hex) => { isValid: boolean; success: boolean };
 
 function startFacilitator(behavior: FacilitatorBehavior, fee?: { bps: number; receiver: string }) {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -37,16 +37,20 @@ function startFacilitator(behavior: FacilitatorBehavior, fee?: { bps: number; re
     }
     let body = "";
     for await (const chunk of req) body += chunk;
-    const parsed = JSON.parse(body) as { paymentPayload?: { rawTx?: string; feeRawTx?: string } };
-    const rawTx = (parsed.paymentPayload?.rawTx ?? "0x") as Hex;
-    const feeRawTx = parsed.paymentPayload?.feeRawTx as Hex | undefined;
+    const parsed = JSON.parse(body) as {
+      paymentRequirements?: unknown;
+      paymentPayload?: { payload?: { rawTx?: string; feeRawTx?: string }; rawTx?: string; feeRawTx?: string };
+    };
+    const payload = parsed.paymentPayload ?? {};
+    const rawTx = (payload.payload?.rawTx ?? payload.rawTx ?? "0x") as Hex;
+    const feeRawTx = (payload.payload?.feeRawTx ?? payload.feeRawTx) as Hex | undefined;
     const decision = behavior(rawTx, feeRawTx);
     const result =
       path === "/verify"
-        ? { verified: decision.verified }
-        : { settled: decision.settled, txHash: "0xab" };
+        ? { isValid: decision.isValid, invalidReason: "refused" }
+        : { success: decision.success, transaction: "0xab" };
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ result }));
+    res.end(JSON.stringify(result));
   });
   server.listen(0);
   return once(server, "listening").then(() => {
@@ -91,7 +95,7 @@ function startResourceServer() {
 }
 
 test("auto-pays a 402 and retries with a zero-gas payment-signature", async () => {
-  const facilitator = await startFacilitator(() => ({ verified: true, settled: true }));
+  const facilitator = await startFacilitator(() => ({ isValid: true, success: true }));
   const resource = await startResourceServer();
   try {
     const wrapped = withBOT02({ account: AGENT, chain: botChainTestnet, facilitatorUrl: facilitator.url });
@@ -119,7 +123,7 @@ test("falls back to a normal gas-price tx when the zero-gas route is refused", a
   const facilitator = await startFacilitator((rawTx) => {
     const tx = parseTransaction(rawTx);
     const zeroGas = ((tx as { gasPrice?: bigint }).gasPrice ?? 0n) === 0n;
-    return zeroGas ? { verified: false, settled: false } : { verified: true, settled: true };
+    return zeroGas ? { isValid: false, success: false } : { isValid: true, success: true };
   });
   const resource = await startResourceServer();
   try {
@@ -154,13 +158,13 @@ test("signs a second fee tx when the facilitator charges a surcharge", async () 
       const zeroGas = ((tx as { gasPrice?: bigint }).gasPrice ?? 0n) === 0n;
       // A fee cannot ride the zero-gas paymaster path: reject it so the SDK
       // re-signs both txs with a normal gas price (self-pay).
-      if (zeroGas) return { verified: false, settled: false };
+      if (zeroGas) return { isValid: false, success: false };
       assert.ok(feeRawTx, "fee tx must be included in the payload");
       const feeTx = parseTransaction(feeRawTx);
       assert.equal(feeTx.to, FEE_RECEIVER);
       assert.equal(feeTx.value, 1_500_000_000_000_000_000n / 100n); // 1% of 1.5e18 → ceil
       assert.equal((feeTx as { gasPrice?: bigint }).gasPrice, 2_000_000_000n);
-      return { verified: true, settled: true };
+      return { isValid: true, success: true };
     },
     { bps: 100, receiver: FEE_RECEIVER },
   );
@@ -193,7 +197,7 @@ test("signs a second fee tx when the facilitator charges a surcharge", async () 
 });
 
 test("no fee tx when the facilitator advertises bps = 0", async () => {
-  const facilitator = await startFacilitator(() => ({ verified: true, settled: true }), { bps: 0, receiver: null });
+  const facilitator = await startFacilitator(() => ({ isValid: true, success: true }), { bps: 0, receiver: null });
   const resource = await startResourceServer();
   try {
     const wrapped = withBOT02({ account: AGENT, chain: botChainTestnet, facilitatorUrl: facilitator.url });

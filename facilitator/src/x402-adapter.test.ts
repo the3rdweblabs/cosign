@@ -43,11 +43,16 @@ function details(): SelfpayPaymentDetails {
     amount: "1000",
     asset: "0x0000000000000000000000000000000000000000",
     payTo: PAYTO,
+    maxTimeoutSeconds: 120,
   };
 }
 
 function req(rawTx: Hex, overrides: Partial<SelfpayPaymentDetails> = {}): VerifyRequest {
-  return { paymentDetails: { ...details(), ...overrides }, paymentPayload: { rawTx } };
+  const requirements = { ...details(), ...overrides };
+  return {
+    paymentRequirements: requirements,
+    paymentPayload: { x402Version: 2, accepted: requirements, payload: { rawTx } },
+  };
 }
 
 function policyApproving(): SponsorPolicy {
@@ -149,7 +154,11 @@ test("adapter (paymaster enabled): rejects a zero-gas payment that carries a fee
       bundler: async () => ({ bundleHash: "0xbb00000000000000000000000000000000000000000000000000000000000000" as Hex }),
     },
   });
-  const withFee: VerifyRequest = { paymentDetails: details(), paymentPayload: { rawTx, feeRawTx: "0xfeefee" as Hex } };
+  const requirements = details();
+  const withFee: VerifyRequest = {
+    paymentRequirements: requirements,
+    paymentPayload: { x402Version: 2, accepted: requirements, payload: { rawTx, feeRawTx: "0xfeefee" as Hex } },
+  };
 
   const verified = await adapter.verify(withFee);
   assert.equal(verified.verified, false);

@@ -180,10 +180,10 @@ test("agent: pay_uri pays through the facilitator and retries served", async () 
   globalThis.fetch = (async (input: unknown) => {
     const url = typeof input === "string" ? input : (input as Request).url;
     if (url.endsWith("/verify")) {
-      return new Response(JSON.stringify({ result: { verified: true, txHash: "0xabc" } }), { headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ isValid: true }), { headers: { "content-type": "application/json" } });
     }
     if (url.endsWith("/settle")) {
-      return new Response(JSON.stringify({ result: { settled: true } }), { headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, transaction: "0xabc" }), { headers: { "content-type": "application/json" } });
     }
     return new Response("not found", { status: 404 });
   }) as typeof fetch;

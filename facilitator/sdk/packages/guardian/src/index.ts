@@ -3,7 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import type { Address, Hex, PublicClient } from "viem";
-import { ACTION_REQUESTED_EVENT, AGENT_REGISTRY_ABI, CONSENT_GATEWAY_ABI, REQUEST_STATUS, type RequestStatus } from "@xbot02/core";
+import { actionRequestedEvent, agentRegistryAbi, consentGatewayAbi, requestStatus, type RequestStatus } from "@xbot02/core";
 
 export interface ConsentRequestRecord {
   requestId: bigint;
@@ -65,7 +65,7 @@ export async function registerAgent(
     chain: options.wallet.chain,
     account: options.wallet.account ?? null,
     address: options.registryAddress,
-    abi: AGENT_REGISTRY_ABI,
+    abi: agentRegistryAbi,
     functionName: "registerAgent",
     args: [agent, spendCap, periodSeconds],
   });
@@ -84,7 +84,7 @@ export interface AgentPolicy {
 export async function getAgentPolicy(client: PublicClient, registryAddress: Address, agent: Address): Promise<AgentPolicy> {
   const policy = await client.readContract({
     address: registryAddress,
-    abi: AGENT_REGISTRY_ABI,
+    abi: agentRegistryAbi,
     functionName: "getPolicy",
     args: [agent],
   });
@@ -103,7 +103,7 @@ async function write(options: GuardianOptions, functionName: "approve" | "reject
     chain: options.wallet.chain,
     account: options.wallet.account ?? null,
     address: options.gatewayAddress,
-    abi: CONSENT_GATEWAY_ABI,
+    abi: consentGatewayAbi,
     functionName,
     args: [requestId],
   });
@@ -113,11 +113,11 @@ async function write(options: GuardianOptions, functionName: "approve" | "reject
 export async function getRequestStatus(client: PublicClient, gatewayAddress: Address, requestId: bigint): Promise<RequestStatus> {
   const request = await client.readContract({
     address: gatewayAddress,
-    abi: CONSENT_GATEWAY_ABI,
+    abi: consentGatewayAbi,
     functionName: "getRequest",
     args: [requestId],
   });
-  return REQUEST_STATUS[request[5] as keyof typeof REQUEST_STATUS];
+  return requestStatus[request[5] as keyof typeof requestStatus];
 }
 
 async function resolveRecord(
@@ -129,7 +129,7 @@ async function resolveRecord(
   try {
     const request = await client.readContract({
       address: gatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       functionName: "getRequest",
       args: [requestId],
     });
@@ -140,7 +140,7 @@ async function resolveRecord(
       try {
         const policy = await client.readContract({
           address: registryAddress,
-          abi: AGENT_REGISTRY_ABI,
+          abi: agentRegistryAbi,
           functionName: "getPolicy",
           args: [agent],
         });
@@ -157,7 +157,7 @@ async function resolveRecord(
       amount: amount as bigint,
       actionType: actionType as Hex,
       requestedAt: requestedAt as bigint,
-      status: REQUEST_STATUS[statusNum as keyof typeof REQUEST_STATUS] ?? "None",
+      status: requestStatus[statusNum as keyof typeof requestStatus] ?? "None",
       guardian,
     };
   } catch {
@@ -177,7 +177,7 @@ export async function fetchRequests(options: FetchRequestsOptions): Promise<Cons
   const { client, gatewayAddress, registryAddress, fromBlock } = options;
   const logs = await client.getLogs({
     address: gatewayAddress,
-    event: ACTION_REQUESTED_EVENT,
+    event: actionRequestedEvent,
     fromBlock: fromBlock ?? 0n,
     toBlock: "latest",
   });
@@ -224,7 +224,7 @@ export async function watchGateway(options: WatchGatewayOptions): Promise<() => 
   const watch = (eventName: (typeof GATEWAY_EVENTS)[number]) =>
     client.watchContractEvent({
       address: gatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       eventName,
       pollingInterval: pollMs,
       onLogs: (logs) =>

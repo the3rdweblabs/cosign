@@ -6,8 +6,8 @@ export { botChainTestnet, botChainMainnet } from "./chain.js";
 export {
   type BotNetwork,
   type BotNetworkConfig,
-  BOT_NETWORKS,
-  DEFAULT_BOT_NETWORK,
+  botNetworks,
+  defaultBotNetwork,
   botNetworkFromEnv,
   botNetworkConfig,
   botChainFromEnv,
@@ -15,12 +15,12 @@ export {
   isBotNetwork,
 } from "./network.js";
 export {
-  CONSENT_GATEWAY_ABI,
-  AGENT_REGISTRY_ABI,
-  ACTION_REQUESTED_EVENT,
+  consentGatewayAbi,
+  agentRegistryAbi,
+  actionRequestedEvent,
   actionTypeHash,
 } from "./abis.js";
-export { REQUEST_STATUS, STATUS, STATUS_NUM, STATUS_ORDER, type RequestStatus } from "./status.js";
+export { requestStatus, statusNum, statusOrder, type RequestStatus } from "./status.js";
 export {
   actionTypeLabel,
   formatAmount,
@@ -28,15 +28,26 @@ export {
   timeAgo,
 } from "./format.js";
 export {
-  NATIVE_ASSET,
-  BOT_TESTNET_CAIP2,
-  BOT_MAINNET_CAIP2,
-  X402_SCHEME,
+  nativeAsset,
+  botTestnetCaip2,
+  botMainnetCaip2,
+  x402Scheme,
+  x402Version,
+  x402Error,
+  type X402ErrorCode,
+  type PaymentRequirements,
   type PaymentDetails,
+  type ResourceInfo,
+  type PaymentRequired,
+  type BotChainPayload,
   type PaymentPayload,
   type VerifyRequest,
   type VerificationResult,
+  type VerifyResponse,
   type SettlementResult,
+  type SettleResponse,
+  type SupportedKind,
+  type SupportedResponse,
 } from "./x402.js";
 export {
   type FeeSchedule,
@@ -60,5 +71,4 @@ export {
   encodePaymentRequirements,
   paymentMiddleware,
   type PaymentMiddlewareOptions,
-  type PaymentRequirements,
 } from "./middleware.js";

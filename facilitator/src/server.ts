@@ -10,6 +10,7 @@ import { SelfpayFallback } from "./selfpay-fallback.js";
 import { submitBundle } from "./bundler.js";
 import { botNetworkConfig, envFor } from "@xbot02/core";
 import { feeSchedule, readFeeConfig } from "./fee.js";
+import { privateKeyToAccount } from "viem/accounts";
 
 const net = botNetworkConfig();
 const port = Number(process.env.PAYMASTER_PORT ?? 3000);
@@ -47,13 +48,24 @@ const x402 = new X402Adapter({
     : {}),
 });
 
-const server = createPaymasterServer({ policy, sponsorPrivateKey, x402, feeSchedule: feeSchedule(fee, net.caip2) });
+const signers = paymasterEnabled
+  ? [privateKeyToAccount(sponsorPrivateKey as `0x${string}`).address]
+  : [];
+
+const server = createPaymasterServer({
+  policy,
+  sponsorPrivateKey,
+  x402,
+  feeSchedule: feeSchedule(fee, net.caip2),
+  network: net.caip2,
+  signers,
+});
 
 server.listen(port, () => {
   const mode = paymasterEnabled ? "paymaster (opt-in)" : "self-pay (default)";
   console.log(`[facilitator] x402 facilitator + BOT Chain EOA paymaster listening on :${port} (chain ${chainId}, ${net.network})`);
   console.log(`[facilitator] settlement mode: ${mode}`);
-  console.log(`[facilitator] x402 endpoints: POST /verify, POST /settle`);
+  console.log(`[facilitator] x402 endpoints: POST /verify, POST /settle, GET /supported`);
   if (fee) {
     console.log(`[facilitator] fee: ${fee.bps} bps (${(fee.bps / 100).toFixed(2)}%) to ${fee.receiver} (GET /v1/fee)`);
   } else {

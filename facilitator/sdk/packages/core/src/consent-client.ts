@@ -3,8 +3,8 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import type { Account, Address, Chain, Hex, PublicClient, Transport, WalletClient } from "viem";
-import { CONSENT_GATEWAY_ABI, actionTypeHash } from "./abis.js";
-import { REQUEST_STATUS, type RequestStatus } from "./status.js";
+import { consentGatewayAbi, actionTypeHash } from "./abis.js";
+import { requestStatus, type RequestStatus } from "./status.js";
 
 export type ApprovalOutcome = "Approved" | "Rejected" | "Expired";
 
@@ -85,7 +85,7 @@ export class ConsentClient {
 
     const { result } = await this.publicClient.simulateContract({
       address: this.consentGatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       functionName: "requestAction",
       args,
       account: this.walletClient.account?.address,
@@ -97,7 +97,7 @@ export class ConsentClient {
       chain: this.walletClient.chain,
       account: this.walletClient.account ?? null,
       address: this.consentGatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       functionName: "requestAction",
       args,
     });
@@ -127,11 +127,11 @@ export class ConsentClient {
   async getStatus(requestId: bigint): Promise<RequestStatus> {
     const request = await this.publicClient.readContract({
       address: this.consentGatewayAddress,
-      abi: CONSENT_GATEWAY_ABI,
+      abi: consentGatewayAbi,
       functionName: "getRequest",
       args: [requestId],
     });
-    return REQUEST_STATUS[request[5] as keyof typeof REQUEST_STATUS];
+    return requestStatus[request[5] as keyof typeof requestStatus];
   }
 
   private logEntry(req: ConsentRequest, requestId: bigint, txHash: Hex, status: string): void {

@@ -4,7 +4,7 @@
 
 import type { Chain } from "viem";
 import { botChainTestnet, botChainMainnet } from "./chain.js";
-import { BOT_TESTNET_CAIP2, BOT_MAINNET_CAIP2 } from "./x402.js";
+import { botTestnetCaip2, botMainnetCaip2 } from "./x402.js";
 
 /**
  * Which BOT Chain network a process / app targets.
@@ -17,7 +17,7 @@ import { BOT_TESTNET_CAIP2, BOT_MAINNET_CAIP2 } from "./x402.js";
  */
 export type BotNetwork = "testnet" | "mainnet";
 
-export const DEFAULT_BOT_NETWORK: BotNetwork = "testnet";
+export const defaultBotNetwork: BotNetwork = "testnet";
 
 export interface BotNetworkConfig {
   network: BotNetwork;
@@ -30,12 +30,12 @@ export interface BotNetworkConfig {
   explorerUrl: string;
 }
 
-export const BOT_NETWORKS: Record<BotNetwork, BotNetworkConfig> = {
+export const botNetworks: Record<BotNetwork, BotNetworkConfig> = {
   testnet: {
     network: "testnet",
     chain: botChainTestnet,
     chainId: 968,
-    caip2: BOT_TESTNET_CAIP2,
+    caip2: botTestnetCaip2,
     rpcUrl: "https://rpc.bohr.life",
     explorerUrl: "https://scan.bohr.life",
   },
@@ -43,7 +43,7 @@ export const BOT_NETWORKS: Record<BotNetwork, BotNetworkConfig> = {
     network: "mainnet",
     chain: botChainMainnet,
     chainId: 677,
-    caip2: BOT_MAINNET_CAIP2,
+    caip2: botMainnetCaip2,
     rpcUrl: "https://rpc.botchain.ai",
     explorerUrl: "https://scan.botchain.ai",
   },
@@ -64,7 +64,7 @@ export function isBotNetwork(value: string | undefined): value is BotNetwork {
  */
 export function botNetworkFromEnv(
   env: Record<string, unknown> = nodeEnv(),
-  fallback: BotNetwork = DEFAULT_BOT_NETWORK,
+  fallback: BotNetwork = defaultBotNetwork,
 ): BotNetwork {
   const raw = typeof env.BOT_NETWORK === "string" ? env.BOT_NETWORK.trim().toLowerCase() : undefined;
   if (raw === undefined || raw === "") return fallback;
@@ -88,8 +88,8 @@ export function envFor(env: Record<string, unknown>, name: string, network: BotN
 export function botNetworkConfig(env: Record<string, unknown> = nodeEnv()): BotNetworkConfig {
   const network = botNetworkFromEnv(env);
   return {
-    ...BOT_NETWORKS[network],
-    rpcUrl: envFor(env, "BOT_RPC_URL", network) ?? BOT_NETWORKS[network].rpcUrl,
+    ...botNetworks[network],
+    rpcUrl: envFor(env, "BOT_RPC_URL", network) ?? botNetworks[network].rpcUrl,
   };
 }
 

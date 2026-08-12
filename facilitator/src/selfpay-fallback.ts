@@ -3,12 +3,12 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { keccak256, parseTransaction, recoverTransactionAddress, type Address, type Hex, type PublicClient, type TransactionReceipt } from "viem";
-import { NATIVE_ASSET, type SettlementResult, type VerificationResult, type VerifyRequest } from "@xbot02/core";
+import { nativeAsset, x402Error, type PaymentPayload, type PaymentRequirements, type SettlementResult, type VerificationResult, type VerifyRequest, type X402ErrorCode } from "@xbot02/core";
 import { simulateFeeTx, validateFeeTx, type FeeConfig } from "./fee.js";
 
 export {
-  NATIVE_ASSET,
-  type PaymentDetails as SelfpayPaymentDetails,
+  nativeAsset,
+  type PaymentRequirements as SelfpayPaymentDetails,
   type PaymentPayload as SelfpayPayload,
   type VerifyRequest,
   type VerificationResult,
@@ -38,51 +38,65 @@ export class SelfpayFallback {
     private readonly fee?: FeeConfig,
   ) { }
 
-  async verify(req: VerifyRequest): Promise<VerificationResult> {
-    const { paymentDetails, paymentPayload } = req;
+  /** Verified-at timestamps keyed by payment tx hash, for maxTimeoutSeconds enforcement. */
+  private readonly verifiedAt = new Map<string, number>();
 
-    if (paymentDetails.scheme !== "exact") {
-      return { verified: false, message: `SelfpayFallback only supports scheme "exact", got "${paymentDetails.scheme}"` };
+  async verify(req: VerifyRequest): Promise<VerificationResult> {
+    const requirements = req.paymentRequirements ?? req.paymentDetails;
+    const rawTx = payloadRawTx(req.paymentPayload);
+
+    if (!requirements) {
+      return { verified: false, code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: "Missing paymentRequirements (or legacy paymentDetails)" };
     }
-    if (!paymentPayload?.rawTx) {
-      return { verified: false, message: "Payment payload is missing rawTx" };
+    if (requirements.scheme !== "exact") {
+      return { verified: false, code: x402Error.INVALID_SCHEME, message: `SelfpayFallback only supports scheme "exact", got "${requirements.scheme}"` };
     }
-    if (paymentDetails.asset.toLowerCase() !== NATIVE_ASSET) {
-      return { verified: false, message: "SelfpayFallback only supports native gas-token payments (zero asset address)" };
+    if (!rawTx) {
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: "Payment payload is missing payload.rawTx" };
     }
-    const expectedChainId = parseChainId(paymentDetails.network);
+    if (requirements.asset.toLowerCase() !== nativeAsset) {
+      return { verified: false, code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: "SelfpayFallback only supports native gas-token payments (zero asset address)" };
+    }
+    if (!isPositiveMaxTimeout(requirements.maxTimeoutSeconds)) {
+      return { verified: false, code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: "maxTimeoutSeconds is required in v2 and must be a positive number" };
+    }
+    const expectedChainId = parseChainId(requirements.network);
     if (expectedChainId === null || expectedChainId !== this.chainId) {
-      return { verified: false, message: `Network ${paymentDetails.network} does not match configured chain id ${this.chainId}` };
+      return { verified: false, code: x402Error.INVALID_NETWORK, message: `Network ${requirements.network} does not match configured chain id ${this.chainId}` };
     }
 
     let tx;
     try {
-      tx = parseTransaction(paymentPayload.rawTx);
+      tx = parseTransaction(rawTx);
     } catch (err) {
-      return { verified: false, message: `Could not parse rawTx: ${err instanceof Error ? err.message : String(err)}` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `Could not parse rawTx: ${err instanceof Error ? err.message : String(err)}` };
     }
 
     if (tx.to === undefined || tx.to === null) {
-      return { verified: false, message: "rawTx is a contract creation, not a payment transfer" };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: "rawTx is a contract creation, not a payment transfer" };
+    }
+
+    if (tx.chainId !== undefined && tx.chainId !== this.chainId) {
+      return { verified: false, code: x402Error.INVALID_NETWORK, message: `rawTx chain id ${tx.chainId} does not match configured chain id ${this.chainId}` };
     }
 
     let from: Address;
     try {
-      from = await recoverTransactionAddress({ serializedTransaction: paymentPayload.rawTx } as never);
+      from = await recoverTransactionAddress({ serializedTransaction: rawTx } as never);
     } catch (err) {
-      return { verified: false, message: `Could not recover sender: ${err instanceof Error ? err.message : String(err)}` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `Could not recover sender: ${err instanceof Error ? err.message : String(err)}` };
     }
 
     const to = tx.to.toLowerCase();
-    const payTo = paymentDetails.payTo.toLowerCase();
+    const payTo = requirements.payTo.toLowerCase();
     if (to !== payTo) {
-      return { verified: false, message: `rawTx to ${tx.to} does not match payTo ${paymentDetails.payTo}` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `rawTx to ${tx.to} does not match payTo ${requirements.payTo}` };
     }
 
-    const amount = BigInt(paymentDetails.amount);
+    const amount = BigInt(requirements.amount);
     const value = tx.value ?? 0n;
     if (value !== amount) {
-      return { verified: false, message: `rawTx value ${value} does not match exact amount ${amount}` };
+      return { verified: false, code: x402Error.INVALID_PAYLOAD, message: `rawTx value ${value} does not match exact amount ${amount}` };
     }
 
     const simulate = await this.client
@@ -90,17 +104,21 @@ export class SelfpayFallback {
       .then(() => true)
       .catch((err) => err instanceof Error ? err.message : String(err));
     if (simulate !== true) {
-      return { verified: false, message: `Simulation failed: ${simulate}` };
+      const reason = String(simulate);
+      return { verified: false, code: classifySimulationFailure(reason), message: `Simulation failed: ${reason}` };
     }
 
     if (this.fee) {
-      const feeCheck = await this.checkFee(paymentPayload.feeRawTx, amount, from);
+      const feeCheck = await this.checkFee(payloadFeeRawTx(req.paymentPayload), amount, from);
       if (!feeCheck.ok) {
-        return { verified: false, message: feeCheck.message };
+        return { verified: false, code: x402Error.INVALID_PAYLOAD, message: feeCheck.message };
       }
     }
 
-    return { verified: true, txHash: keccak256(paymentPayload.rawTx), from };
+    const txHash = keccak256(rawTx);
+    this.verifiedAt.set(txHash, Date.now());
+
+    return { verified: true, txHash, from };
   }
 
   private async checkFee(
@@ -124,33 +142,57 @@ export class SelfpayFallback {
   }
 
   async settle(req: VerifyRequest): Promise<SettlementResult> {
-    const { paymentPayload } = req;
+    const requirements = req.paymentRequirements ?? req.paymentDetails;
+    const rawTx = payloadRawTx(req.paymentPayload);
 
-    let txHash: Hex;
+    if (!requirements) {
+      return { settled: false, code: x402Error.INVALID_PAYMENT_REQUIREMENTS, message: "Missing paymentRequirements (or legacy paymentDetails)" };
+    }
+    if (!rawTx) {
+      return { settled: false, code: x402Error.INVALID_PAYLOAD, message: "Payment payload is missing payload.rawTx" };
+    }
+
+    const txHash = keccak256(rawTx);
+    const verifiedAt = this.verifiedAt.get(txHash);
+    if (verifiedAt !== undefined && isPositiveMaxTimeout(requirements.maxTimeoutSeconds)) {
+      const maxMs = requirements.maxTimeoutSeconds * 1000;
+      if (Date.now() - verifiedAt > maxMs) {
+        return {
+          settled: false,
+          code: x402Error.INVALID_PAYLOAD,
+          message: `Payment timed out: maxTimeoutSeconds (${requirements.maxTimeoutSeconds}s) elapsed since verification`,
+        };
+      }
+    }
+
+    let broadcastHash: Hex;
     try {
-      txHash = await this.client.sendRawTransaction({ serializedTransaction: paymentPayload.rawTx });
+      broadcastHash = await this.client.sendRawTransaction({ serializedTransaction: rawTx });
     } catch (err) {
-      return { settled: false, message: `Broadcast failed: ${err instanceof Error ? err.message : String(err)}` };
+      return { settled: false, code: x402Error.INVALID_TRANSACTION_STATE, message: `Broadcast failed: ${err instanceof Error ? err.message : String(err)}` };
     }
 
     try {
-      const receipt = await this.client.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await this.client.waitForTransactionReceipt({ hash: broadcastHash });
       if (receipt.status !== "success") {
-        return { settled: false, txHash, message: "Transaction reverted" };
+        return { settled: false, txHash: broadcastHash, code: x402Error.INVALID_TRANSACTION_STATE, message: "Transaction reverted" };
       }
 
-      logSettled("payment", receipt, parseTransaction(paymentPayload.rawTx));
+      logSettled("payment", receipt, parseTransaction(rawTx));
 
-      if (this.fee && paymentPayload.feeRawTx) {
-        const feeResult = await this.broadcastFee(paymentPayload.feeRawTx);
-        if (!feeResult.settled) {
-          return { settled: false, txHash, message: feeResult.message };
+      if (this.fee) {
+        const feeRawTx = payloadFeeRawTx(req.paymentPayload);
+        if (feeRawTx) {
+          const feeResult = await this.broadcastFee(feeRawTx);
+          if (!feeResult.settled) {
+            return { settled: false, txHash: broadcastHash, code: x402Error.INVALID_TRANSACTION_STATE, message: feeResult.message };
+          }
         }
       }
 
-      return { settled: true, txHash, blockNumber: receipt.blockNumber };
+      return { settled: true, txHash: broadcastHash, blockNumber: receipt.blockNumber };
     } catch (err) {
-      return { settled: false, txHash, message: `No confirmation: ${err instanceof Error ? err.message : String(err)}` };
+      return { settled: false, txHash: broadcastHash, code: x402Error.UNEXPECTED_SETTLE_ERROR, message: `No confirmation: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
@@ -219,4 +261,26 @@ function parseChainId(network: string): number | null {
   if (!network.startsWith("eip155:")) return null;
   const id = Number(network.slice("eip155:".length));
   return Number.isSafeInteger(id) ? id : null;
+}
+
+function isPositiveMaxTimeout(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * v2 nests the signed txs under `payload.rawTx`; accept the v1 flat shape
+ * (`rawTx` directly on the payment payload) as a back-compat alias.
+ */
+export function payloadRawTx(payload: PaymentPayload): Hex | undefined {
+  return payload.payload?.rawTx ?? (payload as unknown as { rawTx?: Hex }).rawTx;
+}
+
+export function payloadFeeRawTx(payload: PaymentPayload): Hex | undefined {
+  return payload.payload?.feeRawTx ?? (payload as unknown as { feeRawTx?: Hex }).feeRawTx;
+}
+
+function classifySimulationFailure(message: string): X402ErrorCode {
+  return /insufficient|exceeds|funds|balance|gas/i.test(message)
+    ? x402Error.INSUFFICIENT_FUNDS
+    : x402Error.INVALID_TRANSACTION_STATE;
 }

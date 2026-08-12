@@ -3,10 +3,12 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { parseTransaction, recoverTransactionAddress, type Hex } from "viem";
+import { parseTransaction, recoverTransactionAddress, type Address, type Hex } from "viem";
+import type { PaymentPayload, PaymentRequirements, VerifyRequest } from "@xbot02/core";
 import type { SponsorPolicy, SponsorableParams } from "./policy.js";
 import { BundlerNotReadyError, submitBundle, type BundleSubmission } from "./bundler.js";
-import type { X402Adapter } from "./x402-adapter.js";
+import { SUPPORTED_PAYMENT_FLOWS, SUPPORTED_SCHEME, type X402Adapter } from "./x402-adapter.js";
+import { payloadRawTx } from "./selfpay-fallback.js";
 
 const JSONRPC_ERROR = {
   PARSE: -32700,
@@ -70,6 +72,10 @@ export interface PaymasterOptions {
   x402?: X402Adapter;
   /** Surcharge schedule advertised at GET /v1/fee (see fee.ts). */
   feeSchedule?: import("@xbot02/core").FeeSchedule;
+  /** CAIP-2 network id (e.g. "eip155:968") advertised at GET /supported. */
+  network?: string;
+  /** Addresses that sponsor/co-sign settlements, advertised at GET /supported. */
+  signers?: string[];
 }
 
 /**
@@ -99,7 +105,7 @@ export function createPaymasterServer(options: PaymasterOptions) {
     const originalEnd = res.end.bind(res);
     res.end = ((...args: unknown[]) => {
       const body = typeof args[0] === "string" ? args[0] : "";
-      const ok = !body.includes('"error"');
+      const ok = !body.includes('"error"') && !/"(success|isValid)"\s*:\s*false/.test(body);
       logRequest(ok, method, path, detail, performance.now() - started, remote);
       return originalEnd(...(args as never[]));
     }) as unknown as ServerResponse["end"];
@@ -109,6 +115,13 @@ export function createPaymasterServer(options: PaymasterOptions) {
       if (req.method === "GET" && path === "/v1/fee") {
         detail = "fee schedule";
         writeResponse(res, { result: options.feeSchedule ?? { bps: 0, receiver: null, network: null, asset: null } });
+        return;
+      }
+
+      // x402 v2 discovery - GET /supported
+      if (req.method === "GET" && path === "/supported") {
+        detail = "supported";
+        writeResponse(res, { result: supportedResponse(options) });
         return;
       }
 
@@ -186,8 +199,37 @@ export async function dispatch(rpc: JsonRpcRequest, options: PaymasterOptions): 
 }
 
 interface X402HttpBody {
-  paymentDetails?: unknown;
-  paymentPayload?: unknown;
+  x402Version?: number;
+  paymentRequirements?: PaymentRequirements;
+  paymentDetails?: PaymentRequirements;
+  paymentPayload?: PaymentPayload;
+}
+
+/**
+ * x402 v2 discovery response (SDK type `SupportedResponse`):
+ * `{ kinds, extensions, signers }`. `kinds[]` carries the chain id (`network`)
+ * and payment flow (`extra.paymentFlow`); `signers` maps each network to the
+ * address(es) that sponsor/co-sign settlements.
+ */
+function supportedResponse(options: PaymasterOptions): {
+  kinds: { x402Version: number; scheme: string; network: string; extra: Record<string, unknown> }[];
+  extensions: string[];
+  signers: Record<string, string[]>;
+} {
+  const flows = [...SUPPORTED_PAYMENT_FLOWS];
+  const kind = {
+    x402Version: 2,
+    scheme: SUPPORTED_SCHEME,
+    network: options.network ?? "eip155:0",
+    extra: { paymentFlow: flows.length === 1 ? flows[0] : flows },
+  };
+  return {
+    kinds: [kind],
+    extensions: [],
+    signers: options.network && options.signers?.length
+      ? { [options.network]: [...options.signers] }
+      : {},
+  };
 }
 
 async function handleX402(adapter: X402Adapter, path: string, body: string, res: ServerResponse): Promise<void> {
@@ -195,25 +237,70 @@ async function handleX402(adapter: X402Adapter, path: string, body: string, res:
   try {
     parsed = JSON.parse(body) as X402HttpBody;
   } catch {
-    writeResponse(res, { error: { code: JSONRPC_ERROR.PARSE, message: "Parse error" } });
+    writeResponse(res, { error: "Malformed JSON body" }, 400);
     return;
   }
-  if (!parsed.paymentDetails || !parsed.paymentPayload) {
-    writeResponse(res, { error: { code: JSONRPC_ERROR.INVALID_PARAMS, message: "Expected { paymentDetails, paymentPayload }" } });
+  const paymentRequirements = parsed.paymentRequirements ?? parsed.paymentDetails;
+  if (!paymentRequirements || !parsed.paymentPayload) {
+    writeResponse(res, { error: "Expected { paymentRequirements, paymentPayload }" }, 400);
     return;
   }
 
   const request = {
-    paymentDetails: parsed.paymentDetails,
+    paymentRequirements,
     paymentPayload: parsed.paymentPayload,
-  } as Parameters<X402Adapter["verify"]>[0];
+  } as VerifyRequest;
 
   try {
-    const result = path === "/verify" ? await adapter.verify(request) : await adapter.settle(request);
-    writeResponse(res, { result });
+    if (path === "/verify") {
+      const v = await adapter.verify(request);
+      const payer = v.from ?? (await payerFromPayload(parsed.paymentPayload));
+      writeResponse(
+        res,
+        {
+          isValid: v.verified,
+          ...(v.verified ? {} : { invalidReason: v.code ?? v.message ?? "invalid_payment" }),
+          ...(payer ? { payer } : {}),
+          ...(v.verified && v.txHash ? { extra: { paymentTxHash: v.txHash } } : {}),
+        },
+        v.verified ? 200 : 402,
+      );
+      return;
+    }
+
+    const s = await adapter.settle(request);
+    const payer = await payerFromPayload(parsed.paymentPayload);
+    writeResponse(
+      res,
+      {
+        success: s.settled,
+        ...(s.settled ? {} : { errorReason: s.code ?? s.message ?? "payment_failed" }),
+        ...(payer ? { payer } : {}),
+        transaction: s.settled ? (s.txHash ?? "") : "",
+        network: adapter.network,
+        ...(s.settled ? { amount: paymentRequirements.amount } : {}),
+        ...(s.blockNumber !== undefined ? { extensions: { blockNumber: s.blockNumber } } : {}),
+      },
+      s.settled ? 200 : 402,
+    );
   } catch (err) {
     if (res.writableEnded) return;
-    writeResponse(res, { error: { code: JSONRPC_ERROR.INTERNAL, message: err instanceof Error ? err.message : "Internal error" } });
+    writeResponse(res, { error: err instanceof Error ? err.message : "Internal error" }, 500);
+  }
+}
+
+/**
+ * Recover the payer address from the signed raw tx in the payment payload.
+ * Used to populate the spec's `payer` field on /verify and /settle responses
+ * when the backend did not already report it.
+ */
+async function payerFromPayload(payload: PaymentPayload): Promise<Address | undefined> {
+  const rawTx = payloadRawTx(payload);
+  if (!rawTx) return undefined;
+  try {
+    return await recoverTransactionAddress({ serializedTransaction: rawTx } as never);
+  } catch {
+    return undefined;
   }
 }
 
@@ -299,7 +386,7 @@ function effectiveGasPrice(tx: ReturnType<typeof parseTransaction>): bigint {
   return 0n;
 }
 
-function writeResponse(res: ServerResponse, payload: unknown): void {
-  res.writeHead(200, { "content-type": "application/json" });
+function writeResponse(res: ServerResponse, payload: unknown, status = 200): void {
+  res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(payload, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value)));
 }

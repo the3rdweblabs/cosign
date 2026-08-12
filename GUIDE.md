@@ -117,6 +117,19 @@ forge script script/Deploy.s.sol --rpc-url bohr --broadcast --verify
 The script deploys `AgentRegistry`, then `ConsentGateway`, then wires
 `registry.setConsentGateway(gateway)` and asserts both back-references.
 
+Before deploying, confirm the deployer is funded enough to cover gas:
+
+```bash
+node scripts/check-balance.mjs testnet        # deployer from deploy.testnet.json, or
+node scripts/check-balance.mjs testnet 0x…    # explicit deployer address pre-deploy
+```
+
+It prints the live gas price, the full deploy cost (AgentRegistry +
+ConsentGateway + `setConsentGateway`, ~1,337,634 gas), each address's
+tBOT balance, and an "enough for deploy" flag. Use the mainnet form
+(`mainnet`) before the first mainnet deploy - there is no mainnet faucet,
+so fund the deployer across the bridge first.
+
 Capture the two printed addresses:
 
 - `AgentRegistry deployed:` `0x…`

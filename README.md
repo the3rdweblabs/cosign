@@ -63,6 +63,8 @@ cd contracts && forge install && forge build && forge test
 
 # deploy (creates registry + gateway, wires setConsentGateway)
 # requires DEPLOYER_PRIVATE_KEY in env, and a funded account
+# pre-check the deployer balance: node scripts/check-balance.mjs testnet [0x…]
+node scripts/check-balance.mjs testnet
 
 # TESTNET (chain 968) - tBOT
 forge script script/Deploy.s.sol --rpc-url bohr --broadcast

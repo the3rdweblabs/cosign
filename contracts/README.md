@@ -18,6 +18,7 @@ cosign/
 ├── src/ConsentGateway.sol       # requestAction/approve/reject - on-chain circuit breaker
 ├── script/Deploy.s.sol          # deploys registry + gateway, wires setConsentGateway
 ├── scripts/check-deploy.mjs     # HTTP verification of deploy records (testnet + mainnet)
+├── scripts/check-balance.mjs    # native BOT/tBOT balances + deploy gas-cost estimate
 ├── test/ConsentGateway.t.sol    # 20 forge tests - all flow paths
 ├── foundry.toml                 # solc 0.8.24, bohr/botchain RPCs, fs_permissions
 ├── .env.example                 # BOT_NETWORK + DEPLOYER_PRIVATE_KEY template
@@ -263,6 +264,40 @@ node scripts/check-deploy.mjs mainnet    # just mainnet (chain 677)
 - Requires Node 18+ (global `fetch`); no dependencies.
 - Exit code `0` only when every checked record passes chain id, has code
   on-chain, and both contracts are verified.
+
+### Checking balances / deploy funding
+
+`scripts/check-balance.mjs` checks native BOT/tBOT balances and prints the
+cost of one full deployment at the live gas price, so you can confirm the
+deployer is funded **before** running `Deploy.s.sol`. Gas numbers are the
+measured values from the testnet broadcast (AgentRegistry CREATE 482,402 ·
+ConsentGateway CREATE 807,998 · `setConsentGateway` 47,234 = 1,337,634 total).
+
+It reads the deployer from the `deploy.{network}.json` record when present and
+accepts extra addresses on the command line. With no record yet (e.g. before
+the first mainnet deploy) it falls back to the built-in RPC for that network.
+
+```bash
+node scripts/check-balance.mjs                    # deployer, every present record
+node scripts/check-balance.mjs mainnet            # deployer, just mainnet
+node scripts/check-balance.mjs mainnet 0xDeployer 0xAgent   # explicit addrs, pre-deploy
+```
+
+Output includes the live gas price, per-tx and total deploy cost in BOT, each
+address's balance, and an "enough for deploy" flag (balance vs. total cost).
+
+```text
+=== MAINNET ===
+  gas price   20 gwei
+  deploy cost 0.026752 BOT (1,337,634 gas)
+    -   482,402 gas  0.009648 BOT  (482k)
+    -   807,998 gas  0.016159 BOT  (807k)
+    -    47,234 gas  0.000944 BOT  (47k)
+  deployer (from record)      0.100000 BOT  0x…  (enough for deploy)
+```
+
+- Requires Node 18+ (global `fetch`); no dependencies.
+- Exit code is informational (always `0`) - balance checks don't gate anything.
 
 ### Environment
 

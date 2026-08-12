@@ -69,6 +69,14 @@ The dry-run broadcast logs (with tx hashes) live in
 verification for every present `deploy.{network}.json`, then prints the
 explorer URLs. See [`contracts/README.md`](../../contracts/README.md).
 
+**Check deployer funding before a deploy** with
+`contracts/scripts/check-balance.mjs`: `node scripts/check-balance.mjs
+[testnet|mainnet] [0xDeployer 0xAgent …]` reads the deployer from the
+`deploy.{network}.json` record (or uses explicit addresses / a built-in RPC
+pre-deploy), prints the live gas price, the full deploy cost
+(~1,337,634 gas = AgentRegistry + ConsentGateway + `setConsentGateway`), each
+address's native BOT/tBOT balance, and an "enough for deploy" flag.
+
 ## Contract address environment variables
 
 All services read these per network as `NAME_<NETWORK>` (e.g.

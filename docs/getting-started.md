@@ -19,6 +19,7 @@ forge test
 
 # deploy to testnet (requires a funded account)
 export DEPLOYER_PRIVATE_KEY=0x...
+node scripts/check-balance.mjs testnet   # optional: confirm deployer funding + gas cost
 forge script script/Deploy.s.sol --rpc-url bohr --broadcast --verify
 ```
 

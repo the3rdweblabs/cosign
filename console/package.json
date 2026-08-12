@@ -1,0 +1,29 @@
+{
+  "name": "cosign-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cosign human-facing console for BOT Chain (chain 968): guardian approval queue + live activity feed, reads straight off contract events via viem",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xbot02/core": "file:../facilitator/sdk/packages/core",
+    "@xbot02/guardian": "file:../facilitator/sdk/packages/guardian",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "viem": "^2.55.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.0",
+    "vite": "^8.2.1"
+  }
+}

@@ -193,9 +193,9 @@ test("malformed signature -> HTTP 400", async () => {
   }
 });
 
-test("hubotTaskPriceWei defaults per network (1 tBOT testnet / 0.1 BOT mainnet)", () => {
+test("hubotTaskPriceWei defaults per network (1 tBOT testnet / 0.001 BOT mainnet)", () => {
   assert.equal(DEFAULT_HUBOT_TASK_PRICE.testnet, "1000000000000000000");
-  assert.equal(DEFAULT_HUBOT_TASK_PRICE.mainnet, "100000000000000000");
+  assert.equal(DEFAULT_HUBOT_TASK_PRICE.mainnet, "1000000000000000");
   assert.equal(hubotTaskPriceWei({}, "testnet"), DEFAULT_HUBOT_TASK_PRICE.testnet);
   assert.equal(hubotTaskPriceWei({}, "mainnet"), DEFAULT_HUBOT_TASK_PRICE.mainnet);
 });

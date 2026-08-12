@@ -11,8 +11,8 @@ Two endpoints ship, exercising both ways an agent can pay:
 
 | Endpoint | Price (default) | Consent | What it sells |
 |---|---|---|---|
-| `POST /hubot-task` | 1 tBOT testnet / 0.1 BOT mainnet | **required** (`requireConsent: true`) | Dispatch a physical HuBot robot |
-| `POST /market-report` | **0.5 tBOT testnet / 0.05 BOT mainnet** | **none** (`requireConsent: false`) | A digital BOT Chain market report |
+| `POST /hubot-task` | 1 tBOT testnet / 0.001 BOT mainnet | **required** (`requireConsent: true`) | Dispatch a physical HuBot robot |
+| `POST /market-report` | **0.5 tBOT testnet / 0.015 BOT mainnet** | **none** (`requireConsent: false`) | A digital BOT Chain market report |
 
 The `extra.requireConsent` flag is how the endpoint tells the agent which flow to
 use: a pure x402 endpoint (`false`) is paid directly with no `ConsentGateway`
@@ -115,8 +115,8 @@ unsuffixed `RESOURCE_NETWORK` as fallback.
 | `BOT_NETWORK` | `testnet` | `testnet` or `mainnet` |
 | `RESOURCE_PORT` | `4000` | listener |
 | `RESOURCE_PAYTO` | - | **required** - the "pay to" address receiving the payment |
-| `HUBOT_TASK_PRICE_TESTNET` / `_MAINNET` | `1000000000000000000` / `100000000000000000` | hubot-task price in wei (1 tBOT testnet, 0.1 BOT mainnet); plain `HUBOT_TASK_PRICE` is the fallback |
-| `MARKET_REPORT_PRICE_TESTNET` / `_MAINNET` | `500000000000000000` / `50000000000000000` | market-report price in wei (0.5 tBOT testnet, 0.05 BOT mainnet); plain `MARKET_REPORT_PRICE` is the fallback |
+| `HUBOT_TASK_PRICE_TESTNET` / `_MAINNET` | `1000000000000000000` / `1000000000000000` | hubot-task price in wei (1 tBOT testnet, 0.001 BOT mainnet); plain `HUBOT_TASK_PRICE` is the fallback |
+| `MARKET_REPORT_PRICE_TESTNET` / `_MAINNET` | `500000000000000000` / `15000000000000000` | market-report price in wei (0.5 tBOT testnet, 0.015 BOT mainnet); plain `MARKET_REPORT_PRICE` is the fallback |
 | `FACILITATOR_URL` | `http://localhost:3000` | the facilitator's base URL |
 | `RESOURCE_NETWORK_TESTNET` / `_MAINNET` | `eip155:968` / `eip155:677` | payment network (currently informational) |
 

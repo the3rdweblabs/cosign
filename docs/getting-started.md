@@ -67,8 +67,8 @@ curl -s http://localhost:3000 \
 The example paid API. Two endpoints ship, both speaking x402 v2 (HTTP `402` with a
 `payment-required` header until the caller proves payment):
 
-- `POST /hubot-task` - **consent-gated** (`extra.requireConsent: true`): dispatching a physical HuBot robot requires an on-chain `ConsentGateway` approval first. 1 tBOT testnet / 0.1 BOT mainnet by default.
-- `POST /market-report` - **pure x402** (`extra.requireConsent: false`): pay **0.5 tBOT testnet / 0.05 BOT mainnet** and get the report, no consent, no guardian.
+- `POST /hubot-task` - **consent-gated** (`extra.requireConsent: true`): dispatching a physical HuBot robot requires an on-chain `ConsentGateway` approval first. 1 tBOT testnet / 0.001 BOT mainnet by default.
+- `POST /market-report` - **pure x402** (`extra.requireConsent: false`): pay **0.5 tBOT testnet / 0.015 BOT mainnet** and get the report, no consent, no guardian.
 
 ```bash
 cd examples/resource-server
@@ -83,8 +83,8 @@ npm start              # listens on :4000
 | `RESOURCE_PORT` | `4000` | listener |
 | `RESOURCE_PAYTO` | - | **required** - recipient of the payment |
 | `RESOURCE_NETWORK_TESTNET` / `_MAINNET` | `eip155:968` / `eip155:677` | payment network (CAIP-2) advertised in the 402 |
-| `HUBOT_TASK_PRICE_TESTNET` / `_MAINNET` | `1000000000000000000` / `100000000000000000` | price in wei of tBOT / BOT (1 tBOT testnet, 0.1 BOT mainnet); plain `HUBOT_TASK_PRICE` is the fallback |
-| `MARKET_REPORT_PRICE_TESTNET` / `_MAINNET` | `500000000000000000` / `50000000000000000` | market-report price in wei (0.5 tBOT testnet, 0.05 BOT mainnet); plain `MARKET_REPORT_PRICE` is the fallback |
+| `HUBOT_TASK_PRICE_TESTNET` / `_MAINNET` | `1000000000000000000` / `1000000000000000` | price in wei of tBOT / BOT (1 tBOT testnet, 0.001 BOT mainnet); plain `HUBOT_TASK_PRICE` is the fallback |
+| `MARKET_REPORT_PRICE_TESTNET` / `_MAINNET` | `500000000000000000` / `15000000000000000` | market-report price in wei (0.5 tBOT testnet, 0.015 BOT mainnet); plain `MARKET_REPORT_PRICE` is the fallback |
 | `FACILITATOR_URL` | `http://localhost:3000` | the facilitator's base URL |
 
 ## 4. Run the console (guardian web app)

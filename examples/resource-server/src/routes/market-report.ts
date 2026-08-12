@@ -33,7 +33,7 @@ export interface MarketReportConfig {
  * A pure x402 paid endpoint - no on-chain consent, no guardian, no circuit
  * breaker. Buying a digital report is low-risk, so this endpoint advertises
  * `requireConsent: false` in its payment requirement: the agent can simply pay
- * (0.5 tBOT testnet / 0.05 BOT mainnet) and get the report, with no
+ * (0.5 tBOT testnet / 0.015 BOT mainnet) and get the report, with no
  * ConsentGateway round-trip.
  *
  * The report body is built from live BOT Chain state (latest block, block

@@ -14,10 +14,10 @@ const payTo = requiredEnv("RESOURCE_PAYTO") as Address;
 
 const networkName = botNetworkFromEnv(process.env);
 const network = envFor(process.env, "RESOURCE_NETWORK", networkName) ?? botNetworks[networkName].caip2;
-// Price per network: 1 tBOT on testnet, 0.1 BOT on mainnet. Per-network env
+// Price per network: 1 tBOT on testnet, 0.001 BOT on mainnet. Per-network env
 // overrides (HUBOT_TASK_PRICE_TESTNET / _MAINNET) win over the plain var.
 const priceWei = hubotTaskPriceWei(process.env, networkName);
-// The market report is a pure x402 purchase: 0.5 tBOT testnet / 0.05 BOT mainnet, no consent needed.
+// The market report is a pure x402 purchase: 0.5 tBOT testnet / 0.015 BOT mainnet, no consent needed.
 const marketReportPrice = marketReportPriceWei(process.env, networkName);
 
 const hubotTask = createHubotTaskRoute({

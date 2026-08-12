@@ -207,9 +207,9 @@ test("market report: on-chain stats RPC down -> report serves nulls with a note,
   }
 });
 
-test("marketReportPriceWei defaults to 0.5 tBOT testnet / 0.05 BOT mainnet", () => {
+test("marketReportPriceWei defaults to 0.5 tBOT testnet / 0.015 BOT mainnet", () => {
   assert.equal(DEFAULT_MARKET_REPORT_PRICE.testnet, "500000000000000000");
-  assert.equal(DEFAULT_MARKET_REPORT_PRICE.mainnet, "50000000000000000");
+  assert.equal(DEFAULT_MARKET_REPORT_PRICE.mainnet, "15000000000000000");
   assert.equal(marketReportPriceWei({}, "testnet"), DEFAULT_MARKET_REPORT_PRICE.testnet);
   assert.equal(marketReportPriceWei({}, "mainnet"), DEFAULT_MARKET_REPORT_PRICE.mainnet);
   assert.equal(marketReportPriceWei({ MARKET_REPORT_PRICE_TESTNET: "1" }, "testnet"), "1");

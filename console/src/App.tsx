@@ -3,7 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import { useState } from "react";
-import { consentGatewayAbi, botChainTestnet, chainConfig, shortAddress } from "./chain";
+import { consentGatewayAbi, chain, chainConfig, shortAddress } from "./chain";
 import { useConsent } from "./hooks/useConsent";
 import { useWallet } from "./hooks/useWallet";
 import { ApprovalQueue, consentGatewayConfigError } from "./ApprovalQueue";
@@ -25,7 +25,7 @@ export default function App() {
     try {
       await wallet.ensureChain();
       const txHash = await wallet.walletClient.writeContract({
-        chain: botChainTestnet,
+        chain: chain,
         account: wallet.address,
         address: chainConfig.consentGatewayAddress,
         abi: consentGatewayAbi,
@@ -50,7 +50,7 @@ export default function App() {
             </span>
             <div>
               <h1 className="text-base font-bold leading-tight text-white">Cosign Console</h1>
-              <p className="text-xs text-slate-400">BOT Chain testnet · chain 968</p>
+              <p className="text-xs text-slate-400">BOT Chain {chainConfig.network} · chain {chainConfig.chainId}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
@@ -61,7 +61,7 @@ export default function App() {
             )}
             {chainConfig.consentGatewayAddress && (
               <a
-                href={`https://scan.bohr.life/address/${chainConfig.consentGatewayAddress}`}
+                href={`${chainConfig.explorerUrl}/address/${chainConfig.consentGatewayAddress}`}
                 target="_blank"
                 rel="noreferrer"
                 className="hidden rounded-full border border-slate-700 px-3 py-1 font-mono text-slate-400 hover:text-white sm:inline"

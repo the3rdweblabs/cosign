@@ -154,6 +154,15 @@ export const actionRequestedEvent = consentGatewayAbi.find(
   (item) => item.type === "event" && item.name === "ActionRequested",
 )!;
 
+/** ConsentGateway event objects keyed by name, for log backfill and watchers. */
+export const consentGatewayEvents = {
+  ActionRequested: consentGatewayAbi.find((item) => item.type === "event" && item.name === "ActionRequested")!,
+  ActionAutoApproved: consentGatewayAbi.find((item) => item.type === "event" && item.name === "ActionAutoApproved")!,
+  ActionApproved: consentGatewayAbi.find((item) => item.type === "event" && item.name === "ActionApproved")!,
+  ActionRejected: consentGatewayAbi.find((item) => item.type === "event" && item.name === "ActionRejected")!,
+  ActionExpired: consentGatewayAbi.find((item) => item.type === "event" && item.name === "ActionExpired")!,
+} as const;
+
 /** Hashes a human-readable action label (e.g. "PAYMENT") to its on-chain bytes32 form. */
 export function actionTypeHash(actionType: string): Hex {
   return keccak256(stringToHex(actionType, { size: 32 }));

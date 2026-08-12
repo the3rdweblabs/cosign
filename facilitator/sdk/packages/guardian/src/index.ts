@@ -3,7 +3,7 @@
 // Authors: @CYBWithFlourish (https://github.com/CYBWithFlourish), @wethe3rdweblabs (https://github.com/wethe3rdweblabs)
 
 import type { Address, Hex, PublicClient } from "viem";
-import { actionRequestedEvent, agentRegistryAbi, consentGatewayAbi, requestStatus, type RequestStatus } from "@xbot02/core";
+import { actionRequestedEvent, consentGatewayEvents, agentRegistryAbi, consentGatewayAbi, requestStatus, type RequestStatus } from "@xbot02/core";
 
 export interface ConsentRequestRecord {
   requestId: bigint;
@@ -203,9 +203,15 @@ export interface WatchGatewayOptions {
 
 /**
  * Framework-agnostic live view of the consent gateway: backfills existing
- * requests, then subscribes to every ConsentGateway event and re-resolves the
+ * requests, then watches every ConsentGateway event and re-resolves the
  * affected request (so status transitions like Pending -> Approved -> Expired
  * flow through `onRequest`). Returns a function that tears the watcher down.
+ *
+ * Polling is filterless: viem's `watchContractEvent` polls via
+ * `eth_newFilter`/`eth_getFilterChanges`, which stateless / load-balanced
+ * public RPCs (e.g. `rpc.botchain.ai`) drop ("filter not found"). Instead we
+ * poll `getLogs` from a moving cursor, deduped by log key, so it works on any
+ * RPC that serves plain log queries.
  */
 export async function watchGateway(options: WatchGatewayOptions): Promise<() => void> {
   const { client, gatewayAddress, registryAddress, fromBlock, pollMs = 2000, onRequest, onError } = options;
@@ -221,26 +227,72 @@ export async function watchGateway(options: WatchGatewayOptions): Promise<() => 
   if (disposed) return () => undefined;
   for (const record of initial) onRequest(record);
 
-  const watch = (eventName: (typeof GATEWAY_EVENTS)[number]) =>
-    client.watchContractEvent({
-      address: gatewayAddress,
-      abi: consentGatewayAbi,
-      eventName,
-      pollingInterval: pollMs,
-      onLogs: (logs) =>
-        logs.forEach((log) => {
-          const requestId = log.args?.requestId;
-          if (requestId !== undefined) {
-            void push(requestId).catch((err) => onError?.(err instanceof Error ? err : new Error(String(err))));
-          }
-        }),
-      onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
-    });
+  const EVENT_MAP: Record<string, (typeof consentGatewayEvents)[keyof typeof consentGatewayEvents]> = {
+    ActionRequested: consentGatewayEvents.ActionRequested,
+    ActionAutoApproved: consentGatewayEvents.ActionAutoApproved,
+    ActionApproved: consentGatewayEvents.ActionApproved,
+    ActionRejected: consentGatewayEvents.ActionRejected,
+    ActionExpired: consentGatewayEvents.ActionExpired,
+  };
 
-  const unwatches = GATEWAY_EVENTS.map(watch);
+  // Use configured fromBlock if provided, otherwise scan from just past tip.
+  const startBlock = fromBlock && fromBlock > 0n ? fromBlock : (await client.getBlockNumber()) + 1n;
+  const state = new Map<(typeof GATEWAY_EVENTS)[number], { cursor: bigint }>();
+  for (const eventName of GATEWAY_EVENTS) state.set(eventName, { cursor: startBlock });
+  const seen = new Set<string>();
+
+  let timer: ReturnType<typeof setInterval> | undefined;
+
+  const poll = async (): Promise<void> => {
+    if (disposed) return;
+    let latest: bigint | undefined;
+    for (const eventName of GATEWAY_EVENTS) {
+      const { cursor } = state.get(eventName)!;
+      try {
+        const logs = await client.getLogs({
+          address: gatewayAddress,
+          event: EVENT_MAP[eventName],
+          fromBlock: cursor,
+        });
+        const fresh: typeof logs = [];
+        let maxBlock = cursor - 1n;
+        for (const log of logs) {
+          const key = `${log.blockNumber ?? ""}:${log.transactionHash}:${log.logIndex ?? ""}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (log.blockNumber !== null && log.blockNumber !== undefined && log.blockNumber > maxBlock) {
+            maxBlock = log.blockNumber;
+          }
+          fresh.push(log);
+        }
+        if (fresh.length > 0) {
+          state.get(eventName)!.cursor = maxBlock;
+          for (const log of fresh) {
+            const requestId = (log as { args?: { requestId?: bigint } }).args?.requestId;
+            if (requestId !== undefined) {
+              void push(requestId).catch((err) => onError?.(err instanceof Error ? err : new Error(String(err))));
+            }
+          }
+        } else {
+          // Nothing new in the scanned range - jump to just past the tip so
+          // the range never grows unboundedly on quiet chains.
+          latest ??= await client.getBlockNumber();
+          state.get(eventName)!.cursor = latest + 1n;
+        }
+      } catch (err) {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  };
+
+  const tick = (): void => {
+    void poll().catch((err) => onError?.(err instanceof Error ? err : new Error(String(err))));
+  };
+  timer = setInterval(tick, pollMs);
+  tick();
 
   return () => {
     disposed = true;
-    unwatches.forEach((unwatch) => unwatch());
+    if (timer !== undefined) clearInterval(timer);
   };
 }

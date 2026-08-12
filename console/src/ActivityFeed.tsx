@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import type { Address } from "viem";
-import { actionTypeLabel, formatAmount, shortAddress, timeAgo } from "./chain";
+import { actionTypeLabel, chainConfig, formatAmount, shortAddress, timeAgo } from "./chain";
 import { StatusBadge } from "./StatusBadge";
 import type { ConsentRequestRecord } from "./hooks/useConsent";
 
@@ -40,7 +40,7 @@ export function ActivityFeed({ requests, loading, error, lastEventAt, refresh }:
         <div>
           <h2 className="text-lg font-semibold text-white">Activity feed</h2>
           <p className="text-sm text-slate-400">
-            Every consent request and its status, live off ConsentGateway events on BOT Chain testnet.
+            Every consent request and its status, live off ConsentGateway events on BOT Chain {chainConfig.network}.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ function FeedRow({ request, now }: { request: ConsentRequestRecord; now: number 
       <td className="px-4 py-3 font-mono font-semibold text-white">#{request.requestId.toString()}</td>
       <td className="px-4 py-3">
         <a
-          href={`https://scan.bohr.life/address/${request.agent}`}
+          href={`${chainConfig.explorerUrl}/address/${request.agent}`}
           target="_blank"
           rel="noreferrer"
           className="font-mono text-slate-300 hover:text-white"

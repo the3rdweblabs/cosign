@@ -18,6 +18,7 @@ export {
   consentGatewayAbi,
   agentRegistryAbi,
   actionRequestedEvent,
+  consentGatewayEvents,
   actionTypeHash,
 } from "./abis.js";
 export { requestStatus, statusNum, statusOrder, type RequestStatus } from "./status.js";

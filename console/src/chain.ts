@@ -21,14 +21,14 @@ export const chainConfig = {
   agentRegistryAddress: envFor(viteEnv, "VITE_AGENT_REGISTRY_ADDRESS", network) as Address | undefined,
   consentGatewayAddress: envFor(viteEnv, "VITE_CONSENT_GATEWAY_ADDRESS", network) as Address | undefined,
   fromBlock: envFor(viteEnv, "VITE_FROM_BLOCK", network) ? BigInt(envFor(viteEnv, "VITE_FROM_BLOCK", network) as string) : 0n,
+  chainId: net.chainId,
+  explorerUrl: net.explorerUrl,
 };
 
 /** The chain object for the active BOT network (used by hooks + wallet). */
 export const chain = net.chain;
 
 export {
-  botChainTestnet,
-  botChainMainnet,
   consentGatewayAbi,
   agentRegistryAbi,
   actionRequestedEvent,

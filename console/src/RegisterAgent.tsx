@@ -131,7 +131,7 @@ export function RegisterAgent({ connectedAddress, walletClient, connectWallet, e
         <p className="mt-4 rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-sm text-emerald-400">
           Registered - tx{" "}
           <a
-            href={`https://scan.bohr.life/tx/${txHash}`}
+            href={`${chainConfig.explorerUrl}/tx/${txHash}`}
             target="_blank"
             rel="noreferrer"
             className="font-mono underline"

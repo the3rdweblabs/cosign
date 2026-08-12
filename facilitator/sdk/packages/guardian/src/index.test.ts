@@ -15,17 +15,22 @@ const GUARDIAN = "0x5555555555555555555555555555555555555555" as Address;
 
 interface MockLog {
   args: { requestId?: bigint };
+  blockNumber?: bigint;
+  transactionHash?: string;
+  logIndex?: number;
 }
 
 function makeMockClient() {
   const logs: MockLog[] = [];
   const statusByRequest = new Map<bigint, number>();
   const policyByAgent = new Map<Address, readonly [Address, bigint, bigint, bigint, bigint, boolean]>();
-  const watchHandlers = new Map<string, (logs: MockLog[]) => void>();
   const writeCalls: Array<{ functionName: string; args: readonly unknown[] }> = [];
+  let latestBlock = 10n;
 
   const client = {
-    getLogs: async () => [...logs],
+    getLogs: async ({ fromBlock, event }: { fromBlock?: bigint; event?: unknown }) =>
+      logs.filter((log) => (log.blockNumber ?? 0n) >= (fromBlock ?? 0n)),
+    getBlockNumber: async () => latestBlock,
     readContract: async ({ functionName, args }: { functionName: string; args: readonly unknown[] }) => {
       if (functionName === "getRequest") {
         const status = statusByRequest.get(args[0] as bigint) ?? 0;
@@ -36,10 +41,6 @@ function makeMockClient() {
       }
       throw new Error(`unexpected readContract ${functionName}`);
     },
-    watchContractEvent: ({ eventName, onLogs }: { eventName: string; onLogs: (logs: MockLog[]) => void }) => {
-      watchHandlers.set(eventName, onLogs);
-      return () => {};
-    },
   };
 
   return {
@@ -47,8 +48,10 @@ function makeMockClient() {
     logs,
     statusByRequest,
     policyByAgent,
-    watchHandlers,
     writeCalls,
+    setLatestBlock: (n: bigint) => {
+      latestBlock = n;
+    },
   };
 }
 
@@ -134,7 +137,7 @@ test("getAgentPolicy reads the registry policy for an agent", async () => {
 
 test("watchGateway backfills then re-emits on live status events", async () => {
   const mock = makeMockClient();
-  mock.logs.push({ args: { requestId: 1n } });
+  mock.logs.push({ args: { requestId: 1n }, blockNumber: 5n, transactionHash: "0xaa", logIndex: 0 });
   mock.statusByRequest.set(1n, 2);
   mock.policyByAgent.set(AGENT, [GUARDIAN, 10n, 1n, 0n, 0n, true]);
 
@@ -151,17 +154,17 @@ test("watchGateway backfills then re-emits on live status events", async () => {
   assert.equal(seen[0].status, "Pending");
 
   mock.statusByRequest.set(1n, 3);
-  const approvedHandler = mock.watchHandlers.get("ActionApproved");
-  assert.ok(approvedHandler, "ActionApproved watcher registered");
-  approvedHandler([{ args: { requestId: 1n } }]);
-  await new Promise((r) => setTimeout(r, 5));
+  mock.logs.push({ args: { requestId: 1n }, blockNumber: 12n, transactionHash: "0xbb", logIndex: 0 });
+  mock.setLatestBlock(12n);
+  await new Promise((r) => setTimeout(r, 10));
 
   assert.equal(seen.length, 2, "status update re-emitted");
   assert.equal(seen[1].status, "Approved");
 
   unwatch();
   mock.statusByRequest.set(1n, 4);
-  approvedHandler([{ args: { requestId: 1n } }]);
-  await new Promise((r) => setTimeout(r, 5));
+  mock.logs.push({ args: { requestId: 1n }, blockNumber: 13n, transactionHash: "0xcc", logIndex: 0 });
+  mock.setLatestBlock(13n);
+  await new Promise((r) => setTimeout(r, 10));
   assert.equal(seen.length, 2, "no events after teardown");
 });
